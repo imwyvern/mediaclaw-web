@@ -125,13 +125,24 @@ export default function AdminPage() {
                   { time: "2026-03-29 10:45:12", event: "Worker #04 started job mc_8f22", level: "INFO" },
                   { time: "2026-03-29 10:44:55", event: "User login: admin@acme.com", level: "AUTH" },
                   { time: "2026-03-29 10:42:01", event: "Storage threshold exceeded on node-01", level: "WARN" },
+                ].length > 0 ? [
+                  { time: "2026-03-29 10:45:12", event: "Worker #04 started job mc_8f22", level: "INFO" },
+                  { time: "2026-03-29 10:44:55", event: "User login: admin@acme.com", level: "AUTH" },
+                  { time: "2026-03-29 10:42:01", event: "Storage threshold exceeded on node-01", level: "WARN" },
                 ].map((log, i) => (
                   <div key={i} className="flex gap-4 border-l-2 pl-4 border-muted">
                     <span className="text-muted-foreground">{log.time}</span>
                     <span className={log.level === "WARN" ? "text-orange-500 font-bold" : "text-blue-500"}>[{log.level}]</span>
                     <span>{log.event}</span>
                   </div>
-                ))}
+                )) : (
+                  <EmptyState 
+                    icon={ListChecks}
+                    title="No system logs"
+                    description="System audit logs will appear here as events occur."
+                    className="border-none py-12"
+                  />
+                )}
               </div>
             </CardContent>
           </Card>

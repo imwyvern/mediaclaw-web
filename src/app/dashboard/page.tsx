@@ -114,8 +114,8 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            <Button variant="ghost" className="w-full mt-6 text-xs text-muted-foreground">
-              <Link href="/dashboard/videos">View all videos</Link>
+            <Button variant="ghost" className="w-full mt-6 text-xs text-muted-foreground" render={<Link href="/dashboard/videos" />}>
+              View all videos
             </Button>
           </CardContent>
         </Card>
