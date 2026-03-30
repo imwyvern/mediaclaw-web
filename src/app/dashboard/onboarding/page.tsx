@@ -54,7 +54,7 @@ export default function OnboardingPage() {
         <div className="mb-12">
           <div className="flex justify-between items-center mb-4 px-1">
             <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Step {step} of 4</span>
-            <Button variant="ghost" size="sm" onClick={skip} className="text-muted-foreground">Skip</Button>
+            <Button variant="ghost" size="sm" onClick={skip} className="text-muted-foreground">跳过</Button>
           </div>
           <Progress value={(step / 4) * 100} className="h-2" />
         </div>
@@ -68,7 +68,7 @@ export default function OnboardingPage() {
             </div>
             <div className="grid md:grid-cols-2 gap-6">
               <Card 
-                className={`cursor-pointer transition-all border-2 hover:border-primary/50 ${plan === "individual" ? "border-primary bg-primary/5" : ""}`}
+                className={`cursor-pointer transition-all border-2 hover:border-primary/50 ${plan === "individual" ? "border-primary bg-primary/5 shadow-md shadow-primary/10" : ""}`}
                 onClick={() => setPlan("individual")}
               >
                 <CardContent className="p-8 text-center space-y-4">
@@ -80,7 +80,7 @@ export default function OnboardingPage() {
                 </CardContent>
               </Card>
               <Card 
-                className={`cursor-pointer transition-all border-2 hover:border-primary/50 ${plan === "enterprise" ? "border-primary bg-primary/5" : ""}`}
+                className={`cursor-pointer transition-all border-2 hover:border-primary/50 ${plan === "enterprise" ? "border-primary bg-primary/5 shadow-md shadow-primary/10" : ""}`}
                 onClick={() => setPlan("enterprise")}
               >
                 <CardContent className="p-8 text-center space-y-4">
@@ -93,7 +93,7 @@ export default function OnboardingPage() {
               </Card>
             </div>
             <Button size="lg" className="w-full h-14 text-lg" disabled={!plan} onClick={nextStep}>
-              继续 <ChevronRight className="ml-2 w-5 h-5" />
+              下一步 <ChevronRight className="ml-2 w-5 h-5" />
             </Button>
           </div>
         )}
@@ -144,7 +144,7 @@ export default function OnboardingPage() {
             </Card>
             <div className="flex gap-4">
               <Button size="lg" variant="outline" className="flex-1 h-14" onClick={() => setStep(1)}>返回</Button>
-              <Button size="lg" className="flex-[2] h-14" onClick={nextStep}>确认创建</Button>
+              <Button size="lg" className="flex-[2] h-14" onClick={nextStep}>确认并继续</Button>
             </div>
           </div>
         )}
@@ -163,25 +163,28 @@ export default function OnboardingPage() {
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-2xl font-bold">上传待处理素材</h3>
-                  <p className="text-muted-foreground max-w-md mx-auto">
+                  <p className="text-muted-foreground max-w-md mx-auto leading-relaxed">
                     上传您的产品展示、访谈或口播素材，我们将自动为您生成符合品牌调性的爆款短视频。
                   </p>
                 </div>
-                <Button size="lg" className="px-12 h-14 relative overflow-hidden group">
-                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={() => {
-                    setLoading(true);
-                    setTimeout(() => {
-                      setLoading(false);
-                      nextStep();
-                    }, 3000);
-                  }} />
-                  {loading ? <Loader2 className="animate-spin" /> : "选择视频文件"}
-                </Button>
-                {loading && <p className="text-sm font-medium text-primary animate-pulse">正在解析视频并生成预览...</p>}
+                <div className="flex justify-center">
+                  <Button size="lg" className="px-12 h-14 relative overflow-hidden group">
+                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={() => {
+                      setLoading(true);
+                      setTimeout(() => {
+                        setLoading(false);
+                        nextStep();
+                      }, 3000);
+                    }} />
+                    {loading ? <Loader2 className="animate-spin mr-2" /> : <Upload className="mr-2 w-5 h-5" />}
+                    {loading ? "正在处理中..." : "选择视频文件"}
+                  </Button>
+                </div>
+                {loading && <p className="text-sm font-medium text-primary animate-pulse italic">AI 正在根据品牌风格解析视频并生成预览...</p>}
               </CardContent>
             </Card>
             <div className="text-center">
-              <Button variant="link" onClick={skip}>稍后再试，先去控制台</Button>
+              <Button variant="link" className="text-muted-foreground" onClick={skip}>暂不尝试，直接进入控制台</Button>
             </div>
           </div>
         )}
@@ -193,17 +196,17 @@ export default function OnboardingPage() {
               <Check size={48} strokeWidth={3} />
             </div>
             <div className="space-y-4">
-              <h1 className="text-5xl font-black tracking-tight">太棒了，一切准备就绪!</h1>
+              <h1 className="text-5xl font-black tracking-tight">太棒了，准备就绪!</h1>
               <p className="text-xl text-muted-foreground max-w-md mx-auto leading-relaxed">
                 您的账号已配置完成。现在，您可以开始批量生产属于您的品牌爆款视频了。
               </p>
             </div>
             <div className="grid gap-4 max-w-sm mx-auto pt-8">
               <Button size="lg" className="h-14 text-lg" onClick={nextStep}>
-                进入控制台 <ArrowRight className="ml-2 w-5 h-5" />
+                进入我的控制台 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button variant="outline" size="lg" className="h-14 text-lg" render={<a href="https://docs.mediaclaw.com" target="_blank" />}>
-                查看快速入门指南
+                查看快速入门文档
               </Button>
             </div>
           </div>

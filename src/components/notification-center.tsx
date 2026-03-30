@@ -14,7 +14,6 @@ import {
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
-  DropdownMenuGroup, 
   DropdownMenuItem, 
   DropdownMenuLabel, 
   DropdownMenuSeparator, 
@@ -22,7 +21,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 interface Notification {
@@ -77,7 +75,7 @@ export function NotificationCenter() {
           <span className="text-base font-bold">通知中心</span>
           {unreadCount > 0 && (
             <Button variant="ghost" size="sm" onClick={markAllRead} className="h-8 text-xs font-normal">
-              <CheckCheck className="w-3 h-3 mr-1" /> 全部已读
+              <CheckCheck className="w-3 h-3 mr-1" /> 全部标记已读
             </Button>
           )}
         </DropdownMenuLabel>
