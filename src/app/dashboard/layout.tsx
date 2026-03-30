@@ -12,7 +12,8 @@ import {
   Settings,
   Bell,
   Menu,
-  LogOut
+  LogOut,
+  Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,6 +31,7 @@ const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Videos", href: "/dashboard/videos", icon: Film },
   { name: "Brands", href: "/dashboard/brands", icon: Briefcase },
+  { name: "Campaigns", href: "/dashboard/campaigns", icon: Target },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
