@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuthStore } from "@/lib/store";
+import { AuthAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -15,27 +19,68 @@ export default function AuthPage() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  
+  // Enterprise fields
+  const [companyName, setCompanyName] = useState("");
+  const [adminName, setAdminName] = useState("");
 
-  const handleSendCode = (e: React.FormEvent) => {
+  const login = useAuthStore((state) => state.login);
+
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone) return;
+    if (!agreeTerms) {
+      toast.error("Please agree to the Terms of Service.");
+      return;
+    }
     setIsLoading(true);
-    // Simulate API call
+    // Simulate sending SMS
     setTimeout(() => {
       setIsLoading(false);
       setStep("code");
+      toast.success("Verification code sent!");
     }, 1000);
   };
 
-  const handleVerifyCode = (e: React.FormEvent) => {
+  const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code) return;
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // Simulate API call
+      // const res = await AuthAPI.login(phone, code);
+      // login(res.data.user, res.data.token);
+      
+      // Mock login success
+      setTimeout(() => {
+        login({ id: "1", name: "Admin", email: "admin@acme.com", phone, role: "admin" }, "mock-jwt-token");
+        setIsLoading(false);
+        router.push("/dashboard");
+      }, 1000);
+    } catch (err) {
       setIsLoading(false);
-      router.push("/dashboard");
-    }, 1000);
+    }
+  };
+
+  const handleEnterpriseRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyName || !phone || !adminName) return;
+    if (!agreeTerms) {
+      toast.error("Please agree to the Terms of Service.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      // await AuthAPI.registerEnterprise({ companyName, phone, adminName });
+      setTimeout(() => {
+        setIsLoading(false);
+        toast.success("Registration submitted! Our team will contact you shortly.");
+      }, 1500);
+    } catch (err) {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -50,8 +95,8 @@ export default function AuthPage() {
 
         <Tabs defaultValue="individual" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8 h-12">
-            <TabsTrigger value="individual" className="text-sm">Individual</TabsTrigger>
-            <TabsTrigger value="enterprise" className="text-sm">Enterprise</TabsTrigger>
+            <TabsTrigger value="individual" className="text-sm">个人登录</TabsTrigger>
+            <TabsTrigger value="enterprise" className="text-sm">企业注册</TabsTrigger>
           </TabsList>
           
           <TabsContent value="individual">
@@ -80,6 +125,14 @@ export default function AuthPage() {
                         />
                       </div>
                     </div>
+                    
+                    <div className="flex items-center space-x-2 py-2">
+                      <Checkbox id="terms1" checked={agreeTerms} onCheckedChange={(c) => setAgreeTerms(c as boolean)} />
+                      <label htmlFor="terms1" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-muted-foreground">
+                        I agree to the <a href="#" className="text-primary hover:underline">Terms of Service</a> and <a href="#" className="text-primary hover:underline">Privacy Policy</a>
+                      </label>
+                    </div>
+
                     <Button type="submit" className="w-full h-12 text-base mt-2" disabled={isLoading}>
                       {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : "Send SMS Code"}
                     </Button>
@@ -121,32 +174,35 @@ export default function AuthPage() {
           <TabsContent value="enterprise">
             <Card className="border-0 shadow-none bg-transparent">
               <CardHeader className="px-0 pt-0">
-                <CardTitle className="text-3xl font-bold tracking-tight">Enterprise Login</CardTitle>
-                <CardDescription className="text-base">Sign in with SSO or corporate email.</CardDescription>
+                <CardTitle className="text-3xl font-bold tracking-tight">Enterprise Registration</CardTitle>
+                <CardDescription className="text-base">Apply for an enterprise workspace.</CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-0">
-                <form className="space-y-4">
+                <form onSubmit={handleEnterpriseRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Work Email</Label>
-                    <Input id="email" type="email" placeholder="name@company.com" className="h-12" required />
+                    <Label htmlFor="companyName">Company Name</Label>
+                    <Input id="companyName" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Acme Corp" className="h-12" required />
                   </div>
-                  <Button type="submit" className="w-full h-12 text-base mt-2">
-                    Continue with Email
+                  <div className="space-y-2">
+                    <Label htmlFor="adminName">Admin Name</Label>
+                    <Input id="adminName" value={adminName} onChange={e => setAdminName(e.target.value)} placeholder="John Doe" className="h-12" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ent-phone">Contact Phone</Label>
+                    <Input id="ent-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="138 0000 0000" className="h-12" required />
+                  </div>
+
+                  <div className="flex items-center space-x-2 py-2">
+                    <Checkbox id="terms2" checked={agreeTerms} onCheckedChange={(c) => setAgreeTerms(c as boolean)} />
+                    <label htmlFor="terms2" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-muted-foreground">
+                      I agree to the <a href="#" className="text-primary hover:underline">Terms of Service</a> and <a href="#" className="text-primary hover:underline">Privacy Policy</a>
+                    </label>
+                  </div>
+
+                  <Button type="submit" className="w-full h-12 text-base mt-2" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : "Submit Application"}
                   </Button>
                 </form>
-                
-                <div className="relative my-8">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-                  </div>
-                </div>
-                
-                <Button variant="outline" className="w-full h-12 text-base">
-                  Single Sign-On (SSO)
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>
