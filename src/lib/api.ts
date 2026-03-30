@@ -76,14 +76,20 @@ export interface Brand {
   logo: string;
 }
 
+export interface EnterpriseRegisterData {
+  orgName: string;
+  industry: string;
+  adminPhone: string;
+}
+
 // API functions
 export const AuthAPI = {
   login: (phone: string, code: string) => api.post<{ token: string; user: User }>("/auth/login", { phone, code }),
-  registerEnterprise: (data: any) => api.post("/auth/enterprise/register", data),
+  registerEnterprise: (data: EnterpriseRegisterData) => api.post("/auth/enterprise/register", data),
 };
 
 export const VideoAPI = {
-  getVideos: (params?: any) => api.get<Video[]>("/videos", { params }),
+  getVideos: (params?: Record<string, string | number | boolean>) => api.get<Video[]>("/videos", { params }),
   getVideo: (id: string) => api.get<Video>(`/videos/${id}`),
 };
 

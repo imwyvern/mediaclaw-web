@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CheckCircle2, CreditCard, QrCode, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,8 @@ export default function CheckoutPage() {
   const [step, setStep] = useState<"select" | "pay" | "success">("select");
   const [paymentMethod, setPaymentMethod] = useState<"wechat" | "alipay">("wechat");
   const [isPolling, setIsPolling] = useState(false);
+
+  const orderId = useMemo(() => `MediaClaw_${Math.random().toString(36).substr(2, 9).toUpperCase()}`, []);
 
   const pack = PACKS.find(p => p.id === selectedPack)!;
 
@@ -164,7 +166,7 @@ export default function CheckoutPage() {
 
                 <div className="text-center space-y-2">
                   <p className="text-2xl font-bold">Total: ￥{pack.price}</p>
-                  <p className="text-sm text-muted-foreground">Order ID: MediaClaw_{Math.random().toString(36).substr(2, 9).toUpperCase()}</p>
+                  <p className="text-sm text-muted-foreground">Order ID: {orderId}</p>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-center border-t bg-muted/50 px-6 py-4">

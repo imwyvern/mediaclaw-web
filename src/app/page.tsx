@@ -43,7 +43,7 @@ export default function LandingPage() {
             </span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mb-10 leading-relaxed">
-            Manage, process, and analyze video content at scale. MediaClaw provides the API and dashboard to empower your application's video capabilities without the overhead.
+            Manage, process, and analyze video content at scale. MediaClaw provides the API and dashboard to empower your application&apos;s video capabilities without the overhead.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
             <Link href="/auth">

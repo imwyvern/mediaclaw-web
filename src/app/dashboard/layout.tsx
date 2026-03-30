@@ -58,25 +58,8 @@ const navItems = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-
-  useEffect(() => {
-    wsManager.connect();
-    return () => wsManager.disconnect();
-  }, []);
-
-  const getBreadcrumbs = () => {
-    const paths = pathname.split("/").filter(Boolean);
-    return paths.map((path, i) => {
-      const href = `/${paths.slice(0, i + 1).join("/")}`;
-      const name = path.charAt(0).toUpperCase() + path.slice(1);
-      return { name, href, isLast: i === paths.length - 1 };
-    });
-  };
-
-  const SidebarContent = () => (
+function SidebarContent({ pathname, onItemClick }: { pathname: string; onItemClick?: () => void }) {
+  return (
     <div className="flex flex-col h-full bg-background border-r">
       <div className="p-6">
         <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
@@ -92,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             const Icon = item.icon;
             return (
-              <Link key={item.name} href={item.href} onClick={() => setIsMobileOpen(false)}>
+              <Link key={item.name} href={item.href} onClick={onItemClick}>
                 <span className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium group ${
                   isActive 
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
@@ -120,12 +103,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </div>
   );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useEffect(() => {
+    wsManager.connect();
+    return () => wsManager.disconnect();
+  }, []);
+
+  const getBreadcrumbs = () => {
+    const paths = pathname.split("/").filter(Boolean);
+    return paths.map((path, i) => {
+      const href = `/${paths.slice(0, i + 1).join("/")}`;
+      const name = path.charAt(0).toUpperCase() + path.slice(1);
+      return { name, href, isLast: i === paths.length - 1 };
+    });
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <aside className="hidden md:block w-64 flex-shrink-0">
-        <SidebarContent />
+        <SidebarContent pathname={pathname} />
       </aside>
 
       <div className="flex flex-col flex-1 min-w-0">
@@ -133,14 +135,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b bg-background/80 backdrop-blur z-30 sticky top-0">
           <div className="flex items-center gap-4">
             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-              <SheetTrigger className="md:hidden inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
+              <SheetTrigger className="md:hidden inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 text-muted-foreground">
                 <Menu className="w-5 h-5" />
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-72">
                 <SheetHeader className="sr-only">
                   <SheetTitle>Navigation Menu</SheetTitle>
                 </SheetHeader>
-                <SidebarContent />
+                <SidebarContent pathname={pathname} onItemClick={() => setIsMobileOpen(false)} />
               </SheetContent>
             </Sheet>
             

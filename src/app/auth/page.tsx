@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Video, ArrowRight, Loader2, Phone, ShieldCheck, Building2, CheckCircle2 } from "lucide-react";
+import { Video, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/lib/store";
@@ -80,7 +80,6 @@ export default function AuthPage() {
     // Mock OAuth Redirect
     setTimeout(() => {
       // Simulate callback with URL params
-      const mockWeChatCode = "wechat_code_123";
       toast.success("微信授权成功！");
       
       // Mock login with WeChat
@@ -109,7 +108,7 @@ export default function AuthPage() {
           MediaClaw
         </div>
 
-        <Tabs defaultValue="login" className="w-full" onValueChange={(v) => setMode(v as any)}>
+        <Tabs defaultValue="login" className="w-full" onValueChange={(v) => setMode(v as "login" | "register")}>
           <TabsList className="grid w-full grid-cols-2 mb-8 h-12 p-1 bg-muted/50">
             <TabsTrigger value="login" className="text-sm">个人登录</TabsTrigger>
             <TabsTrigger value="register" className="text-sm">企业注册</TabsTrigger>
@@ -297,7 +296,7 @@ export default function AuthPage() {
           </div>
           <blockquote className="space-y-6">
             <p className="text-3xl font-medium leading-snug tracking-tight">
-              "MediaClaw 为我们的新媒体矩阵提效了 300% 以上，是目前市面上最专业的视频基建方案。"
+              &quot;MediaClaw 为我们的新媒体矩阵提效了 300% 以上，是目前市面上最专业的视频基建方案。&quot;
             </p>
             <footer className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-muted border overflow-hidden relative">

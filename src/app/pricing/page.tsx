@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, HelpCircle, Video, ArrowRight } from "lucide-react";
+import { Check, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +40,7 @@ export default function PricingPage() {
             选择最适合您的方案，开启自动化视频内容创作之旅。
           </p>
 
-          <Tabs defaultValue="individual" className="w-fit mx-auto" onValueChange={(v) => setTier(v as any)}>
+          <Tabs defaultValue="individual" className="w-fit mx-auto" onValueChange={(v) => setTier(v as "individual" | "enterprise")}>
             <TabsList className="h-12 p-1">
               <TabsTrigger value="individual" className="px-8 py-2">个人版</TabsTrigger>
               <TabsTrigger value="enterprise" className="px-8 py-2">企业版</TabsTrigger>

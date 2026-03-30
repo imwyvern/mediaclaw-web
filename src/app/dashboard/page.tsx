@@ -1,13 +1,20 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChart, Film, Activity, Users, Plus, Upload, MoreHorizontal, ArrowUpRight, TrendingUp, Clock } from "lucide-react";
+import { Film, Activity, Users, Plus, Upload, ArrowUpRight, Clock } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
+  const bandwidthData = useMemo(() => 
+    Array.from({ length: 24 }).map(() => ({
+      height: Math.max(20, Math.random() * 100),
+      usage: Math.floor(Math.random() * 500)
+    })), 
+  []);
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -36,7 +43,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <span className={stat.trend.startsWith("+") ? "text-emerald-500" : "text-emerald-500"}>
+                <span className="text-emerald-500">
                   {stat.trend}
                 </span> 
                 from last month
@@ -59,14 +66,14 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] flex items-end gap-2 pt-6">
-              {Array.from({ length: 24 }).map((_, i) => (
+              {bandwidthData.map((data, i) => (
                 <div 
                   key={i} 
                   className="flex-1 bg-primary/20 hover:bg-primary transition-all rounded-t-sm cursor-pointer group relative" 
-                  style={{ height: `${Math.max(20, Math.random() * 100)}%` }}
+                  style={{ height: `${data.height}%` }}
                 >
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border whitespace-nowrap z-10">
-                    {Math.floor(Math.random() * 500)} GB
+                    {data.usage} GB
                   </div>
                 </div>
               ))}
@@ -94,7 +101,7 @@ export default function DashboardPage() {
                 { id: "3", name: "Tutorial_Setup.mp4", status: "Ready", time: "1 day ago", dur: "12:45" },
                 { id: "4", name: "Social_Ad_Campaign.mp4", status: "Failed", time: "2 days ago", dur: "00:30" }
               ].map((video, i) => (
-                <div key={i} className="flex items-center group cursor-pointer" onClick={() => {}}>
+                <div key={i} className="flex items-center group cursor-pointer">
                   <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center flex-shrink-0 mr-4 group-hover:bg-primary/10 transition-colors">
                     <Film className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>

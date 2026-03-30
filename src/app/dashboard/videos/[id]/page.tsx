@@ -5,15 +5,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
-  Play, 
   Download, 
   Share2, 
-  MoreHorizontal, 
   Sparkles, 
   History, 
   CheckCircle2, 
   Clock, 
-  ExternalLink,
   Edit3,
   Globe
 } from "lucide-react";
@@ -23,9 +20,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VideoPlayer } from "@/components/video-player";
 
 export default function VideoDetailPage() {
@@ -129,11 +123,11 @@ export default function VideoDetailPage() {
             <CardContent className="space-y-4">
               <div className="p-3 bg-background border rounded-lg cursor-pointer hover:border-primary transition-colors group">
                 <div className="text-xs font-bold text-primary mb-1">VARIANT A (Viral Focus)</div>
-                <p className="text-sm line-clamp-2 text-muted-foreground group-hover:text-foreground">"The secret to 10x growth is finally here. Watch to find out how..."</p>
+                <p className="text-sm line-clamp-2 text-muted-foreground group-hover:text-foreground">&quot;The secret to 10x growth is finally here. Watch to find out how...&quot;</p>
               </div>
               <div className="p-3 bg-background border rounded-lg cursor-pointer hover:border-primary transition-colors group">
                 <div className="text-xs font-bold text-primary mb-1">VARIANT B (Feature Focus)</div>
-                <p className="text-sm line-clamp-2 text-muted-foreground group-hover:text-foreground">"Introducing MediaClaw 2.0: The infrastructure for video-first SaaS..."</p>
+                <p className="text-sm line-clamp-2 text-muted-foreground group-hover:text-foreground">&quot;Introducing MediaClaw 2.0: The infrastructure for video-first SaaS...&quot;</p>
               </div>
               <Button variant="outline" className="w-full border-primary/20 text-primary hover:bg-primary/10">
                 Regenerate Suggestions

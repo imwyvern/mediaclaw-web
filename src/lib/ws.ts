@@ -1,17 +1,32 @@
 import { toast } from "sonner";
 
-type WSEvent = "video_completed" | "video_failed" | "credit_low" | "notification" | "video_progress";
+export type WSEvent = "video_completed" | "video_failed" | "credit_low" | "notification" | "video_progress";
 
-interface WSMessage {
-  event: WSEvent;
-  data: any;
+export interface VideoProgressData {
+  videoId: string;
+  progress: number;
 }
+
+export interface NotificationData {
+  message: string;
+}
+
+export interface VideoEventData {
+  id: string;
+  title: string;
+}
+
+export type WSEventData = {
+  video_completed: VideoEventData;
+  video_failed: VideoEventData;
+  credit_low: { balance: number };
+  notification: NotificationData;
+  video_progress: VideoProgressData;
+};
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
   private url: string;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
   private listeners: Map<WSEvent, Set<(data: any) => void>> = new Map();
 
   constructor(url: string = "wss://api.mediaclaw.com/ws") {
@@ -19,7 +34,7 @@ class WebSocketManager {
   }
 
   connect() {
-    if (this.socket?.readyState === WebSocket.OPEN) return;
+    if (typeof window === "undefined" || this.socket?.readyState === WebSocket.OPEN) return;
 
     // Mocking WebSocket for now
     console.log("Connecting to WebSocket:", this.url);
@@ -32,18 +47,15 @@ class WebSocketManager {
       const events: WSEvent[] = ["video_progress", "notification"];
       const event = events[Math.floor(Math.random() * events.length)];
       
-      let data;
       if (event === "video_progress") {
-        data = { videoId: "v_1", progress: Math.floor(Math.random() * 100) };
-      } else {
-        data = { message: "New system update available" };
+        this.emit(event, { videoId: "v_1", progress: Math.floor(Math.random() * 100) });
+      } else if (event === "notification") {
+        this.emit(event, { message: "New system update available" });
       }
-
-      this.emit(event, data);
     }, 10000);
   }
 
-  on(event: WSEvent, callback: (data: any) => void) {
+  on<K extends WSEvent>(event: K, callback: (data: WSEventData[K]) => void) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -51,18 +63,20 @@ class WebSocketManager {
     return () => this.off(event, callback);
   }
 
-  off(event: WSEvent, callback: (data: any) => void) {
+  off<K extends WSEvent>(event: K, callback: (data: WSEventData[K]) => void) {
     this.listeners.get(event)?.delete(callback);
   }
 
-  private emit(event: WSEvent, data: any) {
+  private emit<K extends WSEvent>(event: K, data: WSEventData[K]) {
     this.listeners.get(event)?.forEach((callback) => callback(data));
     
     // Global toast for certain events
     if (event === "video_completed") {
-      toast.success("Video Production Completed", { description: data.title });
+      const videoData = data as VideoEventData;
+      toast.success("Video Production Completed", { description: videoData.title });
     } else if (event === "video_failed") {
-      toast.error("Video Production Failed", { description: data.title });
+      const videoData = data as VideoEventData;
+      toast.error("Video Production Failed", { description: videoData.title });
     }
   }
 
