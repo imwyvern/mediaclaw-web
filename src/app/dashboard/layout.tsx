@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { wsManager } from "@/lib/ws";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -18,7 +19,8 @@ import {
   Calendar,
   Shield,
   ChevronRight,
-  Home
+  Home,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -59,6 +61,11 @@ const navItems = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useEffect(() => {
+    wsManager.connect();
+    return () => wsManager.disconnect();
+  }, []);
 
   const getBreadcrumbs = () => {
     const paths = pathname.split("/").filter(Boolean);
@@ -203,13 +210,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto bg-muted/5">
+        <main className="flex-1 overflow-auto bg-muted/5 pb-20 md:pb-0">
           <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>
           </div>
         </main>
+
+        {/* Mobile Bottom Tab Navigation */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t h-16 flex items-center justify-around px-2 z-40">
+          {[
+            { name: "Home", href: "/dashboard", icon: LayoutDashboard },
+            { name: "Videos", href: "/dashboard/videos", icon: Film },
+            { name: "Create", href: "/dashboard/videos/create", icon: Plus, primary: true },
+            { name: "Stats", href: "/dashboard/analytics", icon: BarChart },
+            { name: "Settings", href: "/dashboard/settings", icon: Settings },
+          ].map((item) => {
+            const isActive = pathname === item.href;
+            const Icon = item.icon;
+            if (item.primary) {
+              return (
+                <Link key={item.name} href={item.href} className="relative -top-6">
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/30 ring-4 ring-background">
+                    <Icon size={24} />
+                  </div>
+                </Link>
+              );
+            }
+            return (
+              <Link key={item.name} href={item.href} className={`flex flex-col items-center gap-1 flex-1 py-1 ${
+                isActive ? "text-primary" : "text-muted-foreground"
+              }`}>
+                <Icon size={20} />
+                <span className="text-[10px] font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );

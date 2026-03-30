@@ -1,6 +1,6 @@
 "use client";
 
-import { Key, BellRing, Webhook, User, Shield, Copy, Plus, Trash2 } from "lucide-react";
+import { Key, BellRing, Webhook, User, Shield, Copy, Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,37 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { useAuthStore } from "@/lib/store";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export default function SettingsPage() {
+  const user = useAuthStore((state) => state.user);
+  const login = useAuthStore((state) => state.login);
+  const [isBinding, setIsBinding] = useState(false);
+
+  const handleBindWeChat = () => {
+    setIsBinding(true);
+    toast.info("正在调起微信绑定...");
+    
+    setTimeout(() => {
+      if (user) {
+        const updatedUser = { ...user, wechatId: "wx_bound_id_123" };
+        login(updatedUser, localStorage.getItem("auth-storage") ? JSON.parse(localStorage.getItem("auth-storage")!).state.token : "mock_token");
+        toast.success("微信绑定成功！");
+      }
+      setIsBinding(false);
+    }, 1500);
+  };
+
+  const handleUnbindWeChat = () => {
+    toast.info("微信已解绑");
+    if (user) {
+      const { wechatId, ...rest } = user;
+      login(rest as any, localStorage.getItem("auth-storage") ? JSON.parse(localStorage.getItem("auth-storage")!).state.token : "mock_token");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-8 max-w-5xl">
       <div>
@@ -53,7 +82,7 @@ export default function SettingsPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue="Admin" />
+                    <Input id="firstName" defaultValue={user?.name || "Admin"} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
@@ -62,13 +91,49 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue="admin@acme.com" disabled />
+                  <Input id="email" type="email" defaultValue={user?.email || "admin@acme.com"} disabled />
                   <p className="text-xs text-muted-foreground">Contact support to change your email address.</p>
                 </div>
               </CardContent>
               <CardFooter className="border-t px-6 py-4">
                 <Button>Save Changes</Button>
               </CardFooter>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Connected Accounts</CardTitle>
+                <CardDescription>Connect your social accounts for easier login.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#07C160]/10 flex items-center justify-center text-[#07C160]">
+                      <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                        <path d="M8.225 3.518c-4.482 0-8.117 3.257-8.117 7.276 0 2.21 1.107 4.183 2.85 5.568-.158.577-1.026 2.05-1.066 2.12-.04.07-.028.163.03.22.035.035.093.06.15.06h.058c.07 0 2.378-.455 3.322-.922.88.243 1.81.378 2.773.378.11 0 .22-.004.332-.01-4.14-.383-7.406-3.418-7.406-7.143 0-3.95 3.69-7.152 8.24-7.152 4.55 0 8.24 3.202 8.24 7.152 0 .546-.07 1.074-.202 1.577 1.07.72 1.83 1.765 2.14 2.96.26-.64.407-1.343.407-2.078 0-5.51-5.188-9.978-11.583-9.978zm10.375 7.97c-3.64 0-6.59 2.645-6.59 5.908 0 1.795.898 3.398 2.314 4.522-.128.47-.833 1.666-.865 1.723-.033.056-.023.132.025.178.028.028.075.048.122.048h.047c.057 0 1.93-.37 2.698-.75.714.198 1.47.307 2.25.307 3.64 0 6.59-2.645 6.59-5.908s-2.95-5.908-6.59-5.908z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="font-medium">WeChat</div>
+                      <div className="text-sm text-muted-foreground">
+                        {user?.wechatId ? "Currently connected" : "Not connected"}
+                      </div>
+                    </div>
+                  </div>
+                  {user?.wechatId ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Bound
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={handleUnbindWeChat}>Unbind</Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={handleBindWeChat} disabled={isBinding}>
+                      {isBinding ? "Connecting..." : "Connect"}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
 

@@ -55,6 +55,7 @@ export interface User {
   email: string;
   phone: string;
   role: "user" | "admin";
+  wechatId?: string;
 }
 
 export interface Video {

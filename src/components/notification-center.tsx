@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { wsManager } from "@/lib/ws";
+import { useEffect, useState } from "react";
 import { 
   Bell, 
   CheckCheck, 
@@ -42,6 +43,21 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 export function NotificationCenter() {
   const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    const unsub = wsManager.on("notification", (data) => {
+      const newNotif: Notification = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: "系统通知",
+        description: data.message,
+        type: "info",
+        time: "刚刚",
+        read: false
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+    });
+    return unsub;
+  }, []);
 
   const markAllRead = () => {
     setNotifications(notifications.map(n => ({ ...n, read: true })));
