@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addDays, startOfDay } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, Filter, Loader2, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -151,7 +152,9 @@ export default function CalendarPage() {
                       </div>
                     </div>
                   </div>
-                  <Badge variant="outline" className="opacity-0 group-hover:opacity-100 transition-opacity">Edit</Badge>
+                  <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link href={`/dashboard/videos/${video.id}`}>View Details</Link>
+                  </Button>
                 </div>
               ))
             ) : (

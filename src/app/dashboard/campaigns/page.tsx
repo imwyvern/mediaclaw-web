@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Target, Calendar, BarChart2, ArrowRight } from "lucide-react";
+import { Plus, Target, Calendar, BarChart2, ArrowRight, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { EmptyState } from "@/components/empty-state";
 
 const CAMPAIGNS = [
   { id: "1", name: "Summer Sale 2026", brand: "Acme Corp", status: "Active", progress: 65, totalVideos: 24, completed: 16, startDate: "2026-06-01", platforms: ["TikTok", "Instagram"] },
@@ -15,6 +16,27 @@ const CAMPAIGNS = [
 
 export default function CampaignsPage() {
   const [loading, setLoading] = useState(false);
+
+  if (CAMPAIGNS.length === 0) {
+    return (
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Campaigns</h1>
+            <p className="text-muted-foreground">Orchestrate multi-video marketing flows automatically.</p>
+          </div>
+          <Button><Plus className="w-4 h-4 mr-2" /> New Campaign</Button>
+        </div>
+        <EmptyState 
+          icon={Rocket}
+          title="No campaigns yet"
+          description="Create a campaign to automate video generation for your brand launches or sales events."
+          actionLabel="Create First Campaign"
+          onAction={() => {}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -72,7 +94,7 @@ export default function CampaignsPage() {
           </Card>
         ))}
 
-        <Card className="flex flex-col border-dashed bg-muted/20 items-center justify-center text-center p-6 min-h-[300px] hover:bg-muted/40 transition-colors cursor-pointer group">
+        <Card className="flex flex-col border-dashed bg-muted/20 items-center justify-center text-center p-6 min-h-[300px] hover:bg-muted/40 transition-colors cursor-pointer group" onClick={() => {}}>
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6 text-primary" />
           </div>

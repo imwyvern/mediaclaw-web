@@ -15,9 +15,9 @@ export default function LandingPage() {
           MediaClaw
         </div>
         <nav className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground">
-          <Link href="#features" className="hover:text-foreground transition-colors">Features</Link>
-          <Link href="#pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-          <Link href="#enterprise" className="hover:text-foreground transition-colors">Enterprise</Link>
+          <Link href="#features" className="hover:text-primary transition-colors">Features</Link>
+          <Link href="/pricing" className="hover:text-primary transition-colors">Pricing</Link>
+          <Link href="/auth" className="hover:text-primary transition-colors">Enterprise</Link>
         </nav>
         <div className="flex items-center gap-4">
           <Link href="/auth">

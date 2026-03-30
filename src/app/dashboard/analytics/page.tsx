@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, BarChart, Bar } from "recharts";
-import { ExportDialog } from "@/components/export-dialog";
+import { ExportDialog, ExportConfig } from "@/components/export-dialog";
 
 const data = [
   { name: "Mon", videos: 12, views: 4000 },
@@ -34,7 +34,8 @@ export default function AnalyticsPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleExport = async (format: string, range: string) => {
+  const handleExport = async (config: ExportConfig) => {
+    console.log("Exporting analytics with config:", config);
     return new Promise<void>(resolve => setTimeout(resolve, 2000));
   };
 

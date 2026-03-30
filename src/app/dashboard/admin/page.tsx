@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Activity, ShieldAlert, Users, Server, Settings2, CheckCircle2, AlertCircle, Database } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Settings2, CheckCircle2, AlertCircle, Database, ListChecks } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { EmptyState } from "@/components/empty-state";
 
 export default function AdminPage() {
   return (
@@ -82,7 +83,7 @@ export default function AdminPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">API Health</CardTitle>
-                <Server className="h-4 w-4 text-emerald-500" />
+                < Server className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">99.98%</div>

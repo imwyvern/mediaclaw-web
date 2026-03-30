@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Briefcase, Plus, MoreHorizontal, LayoutGrid, Image as ImageIcon } from "lucide-react";
+import { Briefcase, Plus, MoreHorizontal, LayoutGrid, Image as ImageIcon, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import Link from "next/link";
 
 const MOCK_BRANDS = [
   { id: "1", name: "Acme Corp", category: "Technology", pipelines: 4, videos: 124, logo: "AC" },
@@ -38,8 +40,8 @@ export default function BrandsPage() {
           <p className="text-muted-foreground">Manage your clients, workspaces, and brand identities.</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger>
-            <Button><Plus className="w-4 h-4 mr-2" /> New Brand</Button>
+          <DialogTrigger className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2">
+            <Plus className="w-4 h-4 mr-2" /> New Brand
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -98,7 +100,9 @@ export default function BrandsPage() {
                     <MoreHorizontal className="w-4 h-4" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Edit Settings</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Link href={`/dashboard/brands/${brand.id}`}>Edit Settings</Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem>Manage Assets</DropdownMenuItem>
                     <DropdownMenuItem className="text-destructive">Delete Brand</DropdownMenuItem>
                   </DropdownMenuContent>
@@ -126,22 +130,21 @@ export default function BrandsPage() {
                 </div>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="outline" className="w-full">View Workspace</Button>
+                <Button variant="outline" className="w-full">
+                  <Link href={`/dashboard/brands/${brand.id}`}>View Workspace</Link>
+                </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-24 text-center border rounded-xl border-dashed bg-muted/20">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 border border-primary/20">
-            <Briefcase className="w-8 h-8 text-primary" />
-          </div>
-          <h3 className="text-2xl font-bold mb-2">No brands yet</h3>
-          <p className="text-muted-foreground max-w-md mb-8">
-            Create brands to organize your content pipelines, isolate assets, and manage client workspaces separately.
-          </p>
-          <Button size="lg" onClick={() => setIsCreateOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Your First Brand</Button>
-        </div>
+        <EmptyState 
+          icon={Building2}
+          title="No brands yet"
+          description="Create brands to organize your content pipelines, isolate assets, and manage client workspaces separately."
+          actionLabel="Add Your First Brand"
+          onAction={() => setIsCreateOpen(true)}
+        />
       )}
     </div>
   );

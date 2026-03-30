@@ -1,11 +1,12 @@
 "use client";
 
-import { CreditCard, Zap, CheckCircle2, AlertCircle } from "lucide-react";
+import { CreditCard, Zap, CheckCircle2, AlertCircle, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ExportDialog, ExportConfig } from "@/components/export-dialog";
 
 const ORDERS = [
   { id: "ORD-2026-032", date: "2026-03-20", plan: "Pro Pack (1000 Credits)", amount: "¥199", status: "Paid" },
@@ -14,6 +15,11 @@ const ORDERS = [
 ];
 
 export default function BillingPage() {
+  const handleExportOrders = async (config: ExportConfig) => {
+    console.log("Exporting orders with config:", config);
+    return new Promise<void>(resolve => setTimeout(resolve, 2000));
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -142,9 +148,17 @@ export default function BillingPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Order History</CardTitle>
-          <CardDescription>Invoices and receipts for past purchases.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Order History</CardTitle>
+            <CardDescription>Invoices and receipts for past purchases.</CardDescription>
+          </div>
+          <ExportDialog 
+            title="Export Invoices" 
+            description="Export your billing history and tax invoices."
+            onExport={handleExportOrders}
+            trigger={<Button variant="outline" size="sm"><ReceiptText className="w-4 h-4 mr-2" /> Export History</Button>}
+          />
         </CardHeader>
         <CardContent>
           <Table>

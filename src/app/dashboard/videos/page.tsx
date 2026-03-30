@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Filter, Play, MoreVertical, Copy, Download, Film, Loader2, Trash2, Edit3, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Filter, Play, MoreVertical, Copy, Download, Film, Loader2, Trash2, Edit3, CheckCircle2, FileVideo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ExportDialog } from "@/components/export-dialog";
+import { ExportDialog, ExportConfig } from "@/components/export-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { toast } from "sonner";
+import Link from "next/link";
 
 type VideoStatus = "Completed" | "Processing" | "Failed";
 
@@ -26,7 +28,6 @@ const MOCK_VIDEOS = [
 export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [videos, setVideos] = useState<typeof MOCK_VIDEOS>([]);
-  const [selectedVideo, setSelectedVideo] = useState<typeof MOCK_VIDEOS[0] | null>(null);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   // Simulate data fetching
@@ -57,8 +58,8 @@ export default function VideosPage() {
     setSelectedItems([]);
   };
 
-  const handleExport = async (format: string, range: string) => {
-    // Simulate API call
+  const handleExport = async (config: ExportConfig) => {
+    console.log("Exporting with config:", config);
     return new Promise<void>(resolve => setTimeout(resolve, 2000));
   };
 
@@ -165,8 +166,7 @@ export default function VideosPage() {
                 {videos.map((video) => (
                   <TableRow 
                     key={video.id} 
-                    className={`cursor-pointer group ${selectedItems.includes(video.id) ? "bg-muted/50" : ""}`} 
-                    onClick={() => setSelectedVideo(video)}
+                    className={`group ${selectedItems.includes(video.id) ? "bg-muted/50" : ""}`} 
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox 
@@ -175,12 +175,12 @@ export default function VideosPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 h-9 bg-muted rounded flex items-center justify-center relative overflow-hidden group-hover:bg-primary/10 transition-colors">
-                          <Play className="w-4 h-4 text-muted-foreground" />
+                      <Link href={`/dashboard/videos/${video.id}`} className="flex items-center gap-3 group/title">
+                        <div className="w-16 h-9 bg-muted rounded flex items-center justify-center relative overflow-hidden group-hover/title:bg-primary/10 transition-colors">
+                          <Play className="w-4 h-4 text-muted-foreground group-hover/title:text-primary transition-colors" />
                         </div>
-                        <span className="font-medium">{video.title}</span>
-                      </div>
+                        <span className="font-medium group-hover/title:text-primary transition-colors">{video.title}</span>
+                      </Link>
                     </TableCell>
                     <TableCell>{video.brand}</TableCell>
                     <TableCell>
@@ -201,7 +201,9 @@ export default function VideosPage() {
                           <MoreVertical className="w-4 h-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setSelectedVideo(video)}>View Details</DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Link href={`/dashboard/videos/${video.id}`}>View Details</Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem>Download</DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
@@ -213,66 +215,15 @@ export default function VideosPage() {
             </Table>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-24 text-center border rounded-xl border-dashed bg-muted/20">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Film className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">No videos found</h3>
-            <p className="text-muted-foreground max-w-sm mb-6">
-              You haven't processed any videos yet. Create your first task to see it here.
-            </p>
-            <Button><Plus className="w-4 h-4 mr-2" /> Create First Video</Button>
-          </div>
+          <EmptyState 
+            icon={FileVideo}
+            title="No videos found"
+            description="You haven't processed any videos yet. Create your first task to see it here."
+            actionLabel="Create First Video"
+            onAction={() => {}}
+          />
         )}
       </Card>
-
-      <Dialog open={!!selectedVideo} onOpenChange={(open) => !open && setSelectedVideo(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{selectedVideo?.title}</DialogTitle>
-            <DialogDescription>
-              {selectedVideo?.brand} • {selectedVideo?.date}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="aspect-video bg-black rounded-lg flex items-center justify-center relative my-4">
-            {selectedVideo?.status === "Processing" ? (
-              <div className="flex flex-col items-center text-white/70">
-                <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                <p>Processing Video...</p>
-              </div>
-            ) : selectedVideo?.status === "Failed" ? (
-              <div className="text-red-400">Rendering Failed</div>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                 <Play className="w-12 h-12 text-white/80 hover:text-white transition-colors cursor-pointer" fill="currentColor" />
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-1 space-y-4">
-              <div>
-                <h4 className="text-sm font-medium mb-1">Generated Copy</h4>
-                <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground relative group">
-                  <p>Check out our latest feature launch! Perfect for scaling your SaaS product faster than ever. 🚀 #SaaS #Growth</p>
-                  <Button size="icon" variant="ghost" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <div className="w-48 space-y-3">
-              <Button className="w-full" disabled={selectedVideo?.status !== "Completed"}>
-                <Download className="w-4 h-4 mr-2" /> Download MP4
-              </Button>
-              <Button variant="outline" className="w-full">
-                Edit Video
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
