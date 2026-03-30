@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Filter, Play, MoreVertical, Copy, Download, Film, Loader2 } from "lucide-react";
+import { Plus, Search, Filter, Play, MoreVertical, Copy, Download, Film, Loader2, Trash2, Edit3, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ExportDialog } from "@/components/export-dialog";
+import { toast } from "sonner";
 
 type VideoStatus = "Completed" | "Processing" | "Failed";
 
@@ -24,6 +27,7 @@ export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [videos, setVideos] = useState<typeof MOCK_VIDEOS>([]);
   const [selectedVideo, setSelectedVideo] = useState<typeof MOCK_VIDEOS[0] | null>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   // Simulate data fetching
   useState(() => {
@@ -34,6 +38,30 @@ export default function VideosPage() {
     return () => clearTimeout(timer);
   });
 
+  const toggleSelectAll = () => {
+    if (selectedItems.length === videos.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(videos.map(v => v.id));
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedItems(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchDelete = () => {
+    toast.success(`Deleted ${selectedItems.length} items`);
+    setSelectedItems([]);
+  };
+
+  const handleExport = async (format: string, range: string) => {
+    // Simulate API call
+    return new Promise<void>(resolve => setTimeout(resolve, 2000));
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -41,10 +69,45 @@ export default function VideosPage() {
           <h1 className="text-3xl font-bold tracking-tight">Videos</h1>
           <p className="text-muted-foreground">Manage and track your video production tasks.</p>
         </div>
-        <Button><Plus className="w-4 h-4 mr-2" /> New Video</Button>
+        <div className="flex items-center gap-2">
+          <ExportDialog 
+            title="Export Videos" 
+            description="Export your video production logs and metadata."
+            onExport={handleExport}
+          />
+          <Button><Plus className="w-4 h-4 mr-2" /> New Video</Button>
+        </div>
       </div>
 
-      <Card className="border-none shadow-none bg-transparent">
+      <Card className="border-none shadow-none bg-transparent relative">
+        {selectedItems.length > 0 && (
+          <div className="absolute -top-14 left-0 right-0 bg-primary text-primary-foreground p-3 rounded-lg shadow-lg flex items-center justify-between z-20 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-4 ml-2">
+              <span className="text-sm font-bold">{selectedItems.length} items selected</span>
+              <div className="h-4 w-px bg-primary-foreground/20" />
+              <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10 h-8 gap-2">
+                <Download className="w-4 h-4" /> Download ZIP
+              </Button>
+              <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10 h-8 gap-2">
+                <Edit3 className="w-4 h-4" /> Edit Copy
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleBatchDelete}
+                className="text-primary-foreground hover:bg-destructive hover:text-white h-8 gap-2"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedItems([])} className="text-primary-foreground/80 hover:text-primary-foreground h-8">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -87,6 +150,9 @@ export default function VideosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox checked={selectedItems.length === videos.length} onCheckedChange={toggleSelectAll} />
+                  </TableHead>
                   <TableHead>Video</TableHead>
                   <TableHead>Brand</TableHead>
                   <TableHead>Status</TableHead>
@@ -97,7 +163,17 @@ export default function VideosPage() {
               </TableHeader>
               <TableBody>
                 {videos.map((video) => (
-                  <TableRow key={video.id} className="cursor-pointer group" onClick={() => setSelectedVideo(video)}>
+                  <TableRow 
+                    key={video.id} 
+                    className={`cursor-pointer group ${selectedItems.includes(video.id) ? "bg-muted/50" : ""}`} 
+                    onClick={() => setSelectedVideo(video)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox 
+                        checked={selectedItems.includes(video.id)} 
+                        onCheckedChange={() => toggleSelectItem(video.id)} 
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-16 h-9 bg-muted rounded flex items-center justify-center relative overflow-hidden group-hover:bg-primary/10 transition-colors">

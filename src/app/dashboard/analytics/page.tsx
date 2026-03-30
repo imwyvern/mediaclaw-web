@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, BarChart, Bar } from "recharts";
+import { ExportDialog } from "@/components/export-dialog";
 
 const data = [
   { name: "Mon", videos: 12, views: 4000 },
@@ -32,6 +33,10 @@ export default function AnalyticsPage() {
     const timer = setTimeout(() => setLoading(false), 1000);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleExport = async (format: string, range: string) => {
+    return new Promise<void>(resolve => setTimeout(resolve, 2000));
+  };
 
   if (loading) {
     return (
@@ -67,9 +72,11 @@ export default function AnalyticsPage() {
               <SelectItem value="90d">Last 90 Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon">
-            <Download className="w-4 h-4" />
-          </Button>
+          <ExportDialog 
+            title="Export Analytics" 
+            description="Export performance metrics and engagement data."
+            onExport={handleExport}
+          />
         </div>
       </div>
 
