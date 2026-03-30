@@ -202,8 +202,8 @@ export default function OnboardingPage() {
               <Button size="lg" className="h-14 text-lg" onClick={nextStep}>
                 进入控制台 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
-              <Button variant="outline" size="lg" className="h-14 text-lg" asChild>
-                <a href="https://docs.mediaclaw.com" target="_blank">查看快速入门指南</a>
+              <Button variant="outline" size="lg" className="h-14 text-lg" render={<a href="https://docs.mediaclaw.com" target="_blank" />}>
+                查看快速入门指南
               </Button>
             </div>
           </div>

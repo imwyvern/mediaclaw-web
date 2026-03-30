@@ -10,7 +10,8 @@ import {
   RotateCcw, 
   Loader2, 
   AlertCircle,
-  Settings
+  Settings,
+  Video
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -62,10 +63,11 @@ export function VideoPlayer({ src, poster, status = "Ready", className }: VideoP
     }
   };
 
-  const handleSeek = (value: number[]) => {
+  const handleSeek = (value: number | readonly number[]) => {
+    const val = Array.isArray(value) ? value[0] : value;
     if (videoRef.current) {
-      videoRef.current.currentTime = value[0];
-      setCurrentTime(value[0]);
+      videoRef.current.currentTime = val;
+      setCurrentTime(val);
     }
   };
 
@@ -161,9 +163,10 @@ export function VideoPlayer({ src, poster, status = "Ready", className }: VideoP
                     max={1}
                     step={0.01}
                     onValueChange={(v) => {
-                      setVolume(v[0]);
-                      if (videoRef.current) videoRef.current.volume = v[0];
-                      setIsMuted(v[0] === 0);
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setVolume(val);
+                      if (videoRef.current) videoRef.current.volume = val;
+                      setIsMuted(val === 0);
                     }}
                     className="w-20 cursor-pointer hidden group-hover/volume:block"
                   />
@@ -172,10 +175,8 @@ export function VideoPlayer({ src, poster, status = "Ready", className }: VideoP
 
               <div className="flex items-center gap-2">
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-white text-xs h-8 hover:bg-white/20">
-                      {playbackRate}x
-                    </Button>
+                  <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="text-white text-xs h-8 hover:bg-white/20" />}>
+                    {playbackRate}x
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-24">
                     {[0.5, 1, 1.25, 1.5, 2].map((rate) => (

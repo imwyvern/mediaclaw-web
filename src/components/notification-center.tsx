@@ -64,15 +64,13 @@ export function NotificationCenter() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <span className="absolute top-2 right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground border-2 border-background">
-              {unreadCount}
-            </span>
-          )}
-        </Button>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" />}>
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-2 right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground border-2 border-background">
+            {unreadCount}
+          </span>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-80 sm:w-96" align="end">
         <DropdownMenuLabel className="flex items-center justify-between px-4 py-3">
@@ -124,10 +122,8 @@ export function NotificationCenter() {
         </ScrollArea>
         <DropdownMenuSeparator />
         <div className="p-2">
-          <Button variant="ghost" className="w-full h-9 text-xs justify-center gap-2" asChild>
-            <Link href="/dashboard/settings?tab=notifications">
-              管理通知设置 <ExternalLink className="w-3 h-3" />
-            </Link>
+          <Button variant="ghost" className="w-full h-9 text-xs justify-center gap-2" render={<Link href="/dashboard/settings?tab=notifications" />}>
+            管理通知设置 <ExternalLink className="w-3 h-3" />
           </Button>
         </div>
       </DropdownMenuContent>

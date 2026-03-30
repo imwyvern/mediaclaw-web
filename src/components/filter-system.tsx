@@ -8,8 +8,6 @@ import {
   ChevronDown, 
   X,
   SortAsc,
-  LayoutGrid,
-  List
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -17,8 +15,6 @@ import {
   DropdownMenuCheckboxItem, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { 
@@ -28,7 +24,6 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
 interface FilterSystemProps {
@@ -53,21 +48,19 @@ export function FilterSystem({ onFilterChange, brands, statuses }: FilterSystemP
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-2">
-            <CalendarIcon className="w-4 h-4" />
-            {date?.from ? (
-              date.to ? (
-                <>
-                  {format(date.from, "LLL dd")} - {format(date.to, "LLL dd")}
-                </>
-              ) : (
-                format(date.from, "LLL dd")
-              )
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="h-9 gap-2" />}>
+          <CalendarIcon className="w-4 h-4" />
+          {date?.from ? (
+            date.to ? (
+              <>
+                {format(date.from, "LLL dd")} - {format(date.to, "LLL dd")}
+              </>
             ) : (
-              <span>选择日期</span>
-            )}
-          </Button>
+              format(date.from, "LLL dd")
+            )
+          ) : (
+            <span>选择日期</span>
+          )}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
@@ -82,16 +75,14 @@ export function FilterSystem({ onFilterChange, brands, statuses }: FilterSystemP
       </Popover>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-2">
-            品牌
-            {selectedBrands.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1 font-normal rounded-sm">
-                {selectedBrands.length}
-              </Badge>
-            )}
-            <ChevronDown className="w-4 h-4 opacity-50" />
-          </Button>
+        <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-9 gap-2" />}>
+          品牌
+          {selectedBrands.length > 0 && (
+            <Badge variant="secondary" className="ml-1 px-1 font-normal rounded-sm">
+              {selectedBrands.length}
+            </Badge>
+          )}
+          <ChevronDown className="w-4 h-4 opacity-50" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
           {brands.map((brand) => (
@@ -112,16 +103,14 @@ export function FilterSystem({ onFilterChange, brands, statuses }: FilterSystemP
       </DropdownMenu>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-2">
-            状态
-            {selectedStatuses.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1 font-normal rounded-sm">
-                {selectedStatuses.length}
-              </Badge>
-            )}
-            <ChevronDown className="w-4 h-4 opacity-50" />
-          </Button>
+        <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-9 gap-2" />}>
+          状态
+          {selectedStatuses.length > 0 && (
+            <Badge variant="secondary" className="ml-1 px-1 font-normal rounded-sm">
+              {selectedStatuses.length}
+            </Badge>
+          )}
+          <ChevronDown className="w-4 h-4 opacity-50" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
           {statuses.map((status) => (
@@ -142,11 +131,9 @@ export function FilterSystem({ onFilterChange, brands, statuses }: FilterSystemP
       </DropdownMenu>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-2">
-            <SortAsc className="w-4 h-4" />
-            排序
-          </Button>
+        <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-9 gap-2" />}>
+          <SortAsc className="w-4 h-4" />
+          排序
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem onClick={() => setSort("newest")}>

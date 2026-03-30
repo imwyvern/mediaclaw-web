@@ -21,15 +21,11 @@ export default function NotFound() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
-          <Button variant="outline" className="flex-1 gap-2" asChild>
-            <Link href="javascript:history.back()">
-              <ArrowLeft size={18} /> 返回上一页
-            </Link>
+          <Button variant="outline" className="flex-1 gap-2" render={<Link href="javascript:history.back()" />}>
+            <ArrowLeft size={18} /> 返回上一页
           </Button>
-          <Button className="flex-1 gap-2" asChild>
-            <Link href="/dashboard">
-              <Home size={18} /> 回到工作台
-            </Link>
+          <Button className="flex-1 gap-2" render={<Link href="/dashboard" />}>
+            <Home size={18} /> 回到工作台
           </Button>
         </div>
       </div>
