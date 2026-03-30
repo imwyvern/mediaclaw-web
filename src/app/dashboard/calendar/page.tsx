@@ -118,9 +118,9 @@ export default function CalendarPage() {
                     {dayVideos.map(video => (
                       <div 
                         key={video.id} 
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate flex items-center gap-1 ${statusColors[video.status]}`}
+                        className={`px-2 py-1 rounded shadow-sm text-[10px] font-bold text-white truncate flex items-center gap-1.5 mb-1 last:mb-0 transition-transform hover:scale-[1.02] ${statusColors[video.status]}`}
                       >
-                        <div className="w-1 h-1 rounded-full bg-white/50" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-white/40 ring-1 ring-white/20" />
                         {video.title}
                       </div>
                     ))}
