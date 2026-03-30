@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 type VideoStatus = "draft" | "scheduled" | "published" | "failed";
 
@@ -52,6 +53,7 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-8 h-full">
+      <MetadataUpdater title="内容排期" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Content Calendar</h1>
@@ -78,7 +80,7 @@ export default function CalendarPage() {
             <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Today</Button>
           </div>
           
-          <Tabs defaultValue="month" onValueChange={(v) => setView(v as "month" | "week")}>
+          <Tabs value={view} onValueChange={(v) => setView(v as "month" | "week")}>
             <TabsList>
               <TabsTrigger value="month">Month</TabsTrigger>
               <TabsTrigger value="week">Week</TabsTrigger>
