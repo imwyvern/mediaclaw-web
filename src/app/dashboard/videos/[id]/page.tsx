@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VideoPlayer } from "@/components/video-player";
 
 export default function VideoDetailPage() {
   const params = useParams();
@@ -54,16 +55,10 @@ export default function VideoDetailPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column: Player & Copy */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="overflow-hidden border-none shadow-2xl bg-black aspect-video flex items-center justify-center relative group">
-            <Play className="w-16 h-16 text-white/50 group-hover:text-white transition-colors cursor-pointer" fill="currentColor" />
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="text-white text-sm font-medium">00:00 / 00:45</div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" className="text-white hover:bg-white/20">HD</Button>
-                <Button size="sm" variant="ghost" className="text-white hover:bg-white/20"><ExternalLink className="w-4 h-4" /></Button>
-              </div>
-            </div>
-          </Card>
+          <VideoPlayer 
+            src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+            status="Ready"
+          />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">

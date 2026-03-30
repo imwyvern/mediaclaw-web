@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ExportDialog, ExportConfig } from "@/components/export-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { FilterSystem } from "@/components/filter-system";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -112,32 +113,13 @@ export default function VideosPage() {
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search videos..." className="pl-9" />
+            <Input placeholder="搜索视频..." className="pl-9 h-9" />
           </div>
-          <div className="flex gap-2">
-            <Select defaultValue="all">
-              <SelectTrigger className="w-[140px]">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="processing">Processing</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select defaultValue="all">
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Brand" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Brands</SelectItem>
-                <SelectItem value="acme">Acme Corp</SelectItem>
-                <SelectItem value="global">Global Inc</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterSystem 
+            brands={["Acme Corp", "Global Inc", "Alpha"]}
+            statuses={["Completed", "Processing", "Failed"]}
+            onFilterChange={(f) => console.log(f)}
+          />
         </div>
 
         {loading ? (

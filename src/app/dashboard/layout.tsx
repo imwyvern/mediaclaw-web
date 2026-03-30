@@ -41,6 +41,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { NotificationCenter } from "@/components/notification-center";
+import { GlobalSearch } from "@/components/global-search";
 
 const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -135,6 +137,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </SheetContent>
             </Sheet>
             
+            <div className="hidden md:block w-full max-w-[240px]">
+              <GlobalSearch />
+            </div>
+            
             <div className="hidden sm:block">
               <Breadcrumb>
                 <BreadcrumbList>
@@ -163,10 +169,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-primary rounded-full border-2 border-background" />
-            </Button>
+            <NotificationCenter />
             
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 outline-none group">
