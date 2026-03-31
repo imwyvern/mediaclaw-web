@@ -66,6 +66,7 @@ export interface Video {
   status: "Completed" | "Processing" | "Failed";
   date: string;
   credits: number;
+  progress?: number;
 }
 
 export interface Brand {

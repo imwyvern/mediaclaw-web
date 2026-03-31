@@ -40,8 +40,10 @@ import { MetadataUpdater } from "@/components/metadata-updater";
 import { api, Video } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function ContentManagementPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState<Video[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -215,7 +217,7 @@ export default function ContentManagementPage() {
               setSearchQuery("");
               setStatusFilter("all");
             } else {
-              // Navigate to create
+              router.push("/dashboard/videos/create");
             }
           }}
         />

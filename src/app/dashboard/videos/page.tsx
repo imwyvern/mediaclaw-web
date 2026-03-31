@@ -26,19 +26,11 @@ import { EmptyState } from "@/components/empty-state";
 import { FilterSystem } from "@/components/filter-system";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MetadataUpdater } from "@/components/metadata-updater";
+import { api, Video as VideoItem } from "@/lib/api";
 
 type VideoStatus = "Completed" | "Processing" | "Failed";
-
-interface VideoItem {
-  id: string;
-  title: string;
-  brand: string;
-  status: VideoStatus;
-  date: string;
-  credits: number;
-  progress?: number;
-}
 
 const MOCK_VIDEOS: VideoItem[] = [
   { id: "1", title: "Q3 营销系列主视频", brand: "Acme Corp", status: "Completed", date: "2026-03-28", credits: 5 },
@@ -47,16 +39,27 @@ const MOCK_VIDEOS: VideoItem[] = [
 ];
 
 export default function VideosPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
+  const fetchVideos = async () => {
+    setLoading(true);
+    try {
+      const res = await api.content.list();
+      setVideos(res.data);
+    } catch (err) {
+      console.error("Failed to fetch videos:", err);
+      // Fallback mock
       setVideos(MOCK_VIDEOS);
+    } finally {
       setLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos();
   }, []);
 
   useEffect(() => {
