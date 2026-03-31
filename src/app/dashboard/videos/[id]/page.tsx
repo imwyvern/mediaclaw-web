@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -12,23 +11,63 @@ import {
   CheckCircle2, 
   Clock, 
   Edit3,
-  Globe
+  Globe,
+  Check,
+  X,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { VideoPlayer } from "@/components/video-player";
+import { MetadataUpdater } from "@/components/metadata-updater";
+import { api, apiClient } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function VideoDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
+  const [approvalComment, setApprovalComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<"Pending" | "Approved" | "Rejected" | "Completed">("Pending");
+
+  const handleApprove = async () => {
+    setIsSubmitting(true);
+    try {
+      await api.content.approve(params.id as string);
+      toast.success("视频已通过审核");
+      setStatus("Approved");
+    } catch (err) {
+      toast.error("操作失败");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!approvalComment) {
+      toast.error("请填写驳回原因");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await apiClient.post(`/v1/content/${params.id}/reject`, { comment: approvalComment });
+      toast.warning("视频已驳回");
+      setStatus("Rejected");
+    } catch (err) {
+      toast.error("操作失败");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
+      <MetadataUpdater title="视频详情" />
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="w-5 h-5" />
@@ -36,7 +75,12 @@ export default function VideoDetailPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">Q3 Campaign Hero Video</h1>
-            <Badge>Completed</Badge>
+            <Badge variant={
+              status === "Approved" || status === "Completed" ? "default" :
+              status === "Rejected" ? "destructive" : "secondary"
+            }>
+              {status === "Pending" ? "待审核" : status === "Approved" ? "已通过" : status === "Rejected" ? "已驳回" : "完成"}
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">ID: {params.id} • Created on Mar 28, 2026</p>
         </div>
@@ -53,6 +97,42 @@ export default function VideoDetailPage() {
             src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
             status="Ready"
           />
+
+          {status === "Pending" && (
+            <Card className="border-primary ring-1 ring-primary/20 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-primary" /> 审批意见
+                </CardTitle>
+                <CardDescription>请审阅视频内容及文案，确认无误后点击通过。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea 
+                  placeholder="在此输入修改意见或备注（驳回必填）..." 
+                  className="min-h-[100px] bg-muted/30"
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                />
+              </CardContent>
+              <CardFooter className="flex gap-4 border-t bg-muted/30 pt-6">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 h-12 gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                  onClick={handleReject}
+                  disabled={isSubmitting}
+                >
+                  <X size={18} /> 驳回修改
+                </Button>
+                <Button 
+                  className="flex-1 h-12 gap-2 font-bold"
+                  onClick={handleApprove}
+                  disabled={isSubmitting}
+                >
+                  <Check size={18} /> 通过并发布
+                </Button>
+              </CardFooter>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -143,6 +223,31 @@ export default function VideoDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="relative space-y-6 before:absolute before:inset-0 before:ml-[11px] before:h-full before:w-0.5 before:bg-muted">
+                {status === "Approved" && (
+                  <div className="relative flex items-start gap-4 ml-6 animate-in fade-in slide-in-from-left-2">
+                    <div className="absolute -left-[31px] mt-1 bg-background rounded-full p-0.5 text-emerald-500">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">Approved & Published</div>
+                      <div className="text-xs text-muted-foreground">Just now</div>
+                    </div>
+                  </div>
+                )}
+                {status === "Rejected" && (
+                  <div className="relative flex items-start gap-4 ml-6 animate-in fade-in slide-in-from-left-2">
+                    <div className="absolute -left-[31px] mt-1 bg-background rounded-full p-0.5 text-destructive">
+                      <X className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">Rejected by Admin</div>
+                      <div className="text-xs text-muted-foreground mb-1">Just now</div>
+                      <p className="text-[10px] bg-destructive/10 text-destructive p-2 rounded-md italic">
+                        &quot;{approvalComment}&quot;
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {[
                   { title: "Published to Platforms", time: "Mar 29, 10:05", icon: CheckCircle2, color: "text-emerald-500" },
                   { title: "Rendering Completed", time: "Mar 28, 14:20", icon: CheckCircle2, color: "text-emerald-500" },
