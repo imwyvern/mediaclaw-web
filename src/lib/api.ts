@@ -116,6 +116,11 @@ export const api = {
     get: (id: string) => apiClient.get(`/v1/tasks/${id}`),
     list: (params?: any) => apiClient.get("/v1/tasks", { params }),
   },
+  campaigns: {
+    list: () => apiClient.get("/v1/campaigns"),
+    get: (id: string) => apiClient.get(`/v1/campaigns/${id}`),
+    create: (data: any) => apiClient.post("/v1/campaigns", data),
+  },
   account: {
     info: () => apiClient.get("/v1/account"),
     usage: () => apiClient.get("/v1/account/usage"),
