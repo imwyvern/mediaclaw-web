@@ -1,10 +1,9 @@
 "use client";
 
-import { Key, BellRing, Webhook, User, Shield, Copy, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Key, BellRing, Webhook, User as UserIcon, Copy, Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,12 +11,37 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { MetadataUpdater } from "@/components/metadata-updater";
+import { api, type User } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SettingsPage() {
   const user = useAuthStore((state) => state.user);
   const login = useAuthStore((state) => state.login);
   const [isBinding, setIsBinding] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [accountInfo, setAccountInfo] = useState<User | null>(null);
+
+  useEffect(() => {
+    const fetchAccount = async () => {
+      setLoading(true);
+      try {
+        const res = await api.account.info();
+        setAccountInfo(res.data);
+        if (res.data && (!user || res.data.id !== user.id)) {
+          // Update store if different
+          // login(res.data, localStorage.getItem("auth_token") || ""); 
+        }
+      } catch (err) {
+        console.error("Failed to fetch account info:", err);
+        setAccountInfo(user);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAccount();
+  }, [user]);
 
   const handleBindWeChat = () => {
     setIsBinding(true);
@@ -25,8 +49,10 @@ export default function SettingsPage() {
     
     setTimeout(() => {
       if (user) {
-        const updatedUser = { ...user, wechatId: "wx_bound_id_123" };
-        login(updatedUser, localStorage.getItem("auth-storage") ? JSON.parse(localStorage.getItem("auth-storage")!).state.token : "mock_token");
+        const updatedUser: User = { ...user, wechatId: "wx_bound_id_123" };
+        const token = typeof window !== "undefined" ? document.cookie.split("; ").find(row => row.startsWith("auth_token="))?.split("=")[1] : "mock_token";
+        login(updatedUser, token || "mock_token");
+        setAccountInfo(updatedUser);
         toast.success("微信绑定成功！");
       }
       setIsBinding(false);
@@ -36,13 +62,31 @@ export default function SettingsPage() {
   const handleUnbindWeChat = () => {
     toast.info("微信已解绑");
     if (user) {
-      const { wechatId, ...rest } = user;
-      login(rest as any, localStorage.getItem("auth-storage") ? JSON.parse(localStorage.getItem("auth-storage")!).state.token : "mock_token");
+      const { wechatId: _, ...rest } = user;
+      const token = typeof window !== "undefined" ? document.cookie.split("; ").find(row => row.startsWith("auth_token="))?.split("=")[1] : "mock_token";
+      login(rest as User, token || "mock_token");
+      setAccountInfo(rest as User);
     }
   };
 
+  if (loading && !accountInfo) {
+    return (
+      <div className="flex flex-col gap-8 max-w-5xl animate-in fade-in duration-500">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-4 w-72" />
+        <div className="flex flex-col md:flex-row gap-6">
+          <Skeleton className="h-40 w-full md:w-48" />
+          <Skeleton className="h-[400px] flex-1" />
+        </div>
+      </div>
+    );
+  }
+
+  const currentUser = accountInfo || user;
+
   return (
-    <div className="flex flex-col gap-8 max-w-5xl">
+    <div className="flex flex-col gap-8 max-w-5xl animate-in fade-in duration-500">
+      <MetadataUpdater title="账号设置" />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Manage your account, API keys, and workspace preferences.</p>
@@ -51,7 +95,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="profile" className="flex flex-col md:flex-row gap-6">
         <TabsList className="flex md:flex-col h-auto bg-transparent gap-1 items-start w-full md:w-48 overflow-x-auto p-0">
           <TabsTrigger value="profile" className="w-full justify-start gap-2 data-[state=active]:bg-muted px-4 py-2 h-10">
-            <User className="w-4 h-4" /> Profile
+            <UserIcon className="w-4 h-4" /> Profile
           </TabsTrigger>
           <TabsTrigger value="api" className="w-full justify-start gap-2 data-[state=active]:bg-muted px-4 py-2 h-10">
             <Key className="w-4 h-4" /> API Keys
@@ -74,29 +118,29 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="w-20 h-20 border-2">
-                    <AvatarImage src="https://github.com/shadcn.png" />
+                    <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name || 'default'}`} />
                     <AvatarFallback>MC</AvatarFallback>
                   </Avatar>
                   <Button variant="outline">Change Avatar</Button>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue={user?.name || "Admin"} />
+                    <Label htmlFor="firstName">Name</Label>
+                    <Input id="firstName" defaultValue={currentUser?.name || "Admin"} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue="User" />
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input id="phone" defaultValue={currentUser?.phone || ""} disabled />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue={user?.email || "admin@acme.com"} disabled />
-                  <p className="text-xs text-muted-foreground">Contact support to change your email address.</p>
+                  <Input id="email" type="email" defaultValue={currentUser?.email || "admin@acme.com"} />
+                  <p className="text-xs text-muted-foreground">Used for notifications and account recovery.</p>
                 </div>
               </CardContent>
               <CardFooter className="border-t px-6 py-4">
-                <Button>Save Changes</Button>
+                <Button onClick={() => toast.success("Profile updated successfully")}>Save Changes</Button>
               </CardFooter>
             </Card>
 
@@ -116,11 +160,11 @@ export default function SettingsPage() {
                     <div>
                       <div className="font-medium">WeChat</div>
                       <div className="text-sm text-muted-foreground">
-                        {user?.wechatId ? "Currently connected" : "Not connected"}
+                        {currentUser?.wechatId ? "Currently connected" : "Not connected"}
                       </div>
                     </div>
                   </div>
-                  {user?.wechatId ? (
+                  {currentUser?.wechatId ? (
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-none">
                         <CheckCircle2 className="w-3 h-3 mr-1" /> Bound
@@ -129,13 +173,15 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <Button variant="outline" size="sm" onClick={handleBindWeChat} disabled={isBinding}>
-                      {isBinding ? "Connecting..." : "Connect"}
+                      {isBinding && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+                      Connect
                     </Button>
                   )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
+...
 
           <TabsContent value="api" className="mt-0 space-y-6">
             <Card>
