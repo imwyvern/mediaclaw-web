@@ -3,7 +3,7 @@
 import { wsManager } from "@/lib/ws";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { 
   Video, 
   LayoutDashboard, 
@@ -12,7 +12,6 @@ import {
   BarChart, 
   CreditCard, 
   Settings,
-  Bell,
   Menu,
   LogOut,
   Target,
@@ -20,9 +19,9 @@ import {
   Shield,
   ChevronRight,
   Home,
-  Plus
+  Plus,
+  ListTodo
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { 
@@ -45,10 +44,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { NotificationCenter } from "@/components/notification-center";
 import { GlobalSearch } from "@/components/global-search";
+import { useAuthStore } from "@/lib/store";
+import { eraseCookie } from "@/lib/cookies";
 
 const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Videos", href: "/dashboard/videos", icon: Film },
+  { name: "Tasks", href: "/dashboard/videos/tasks", icon: ListTodo },
   { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
   { name: "Brands", href: "/dashboard/brands", icon: Briefcase },
   { name: "Campaigns", href: "/dashboard/campaigns", icon: Target },
@@ -107,7 +109,16 @@ function SidebarContent({ pathname, onItemClick }: { pathname: string; onItemCli
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = () => {
+    eraseCookie("auth_token");
+    eraseCookie("refresh_token");
+    logout();
+    router.push("/auth");
+  };
 
   useEffect(() => {
     wsManager.connect();
@@ -158,7 +169,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <Home size={14} />
                     </BreadcrumbLink>
                   </BreadcrumbItem>
-                  {getBreadcrumbs().slice(1).map((crumb, i) => (
+                  {getBreadcrumbs().slice(1).map((crumb) => (
                     <div key={crumb.href} className="flex items-center gap-2">
                       <BreadcrumbSeparator>
                         <ChevronRight size={14} />
@@ -203,7 +214,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <Briefcase className="mr-2 h-4 w-4" /> Switch Workspace
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive focus:bg-destructive focus:text-destructive-foreground cursor-pointer">
+                <DropdownMenuItem 
+                  className="text-destructive focus:bg-destructive focus:text-destructive-foreground cursor-pointer"
+                  onClick={handleLogout}
+                >
                   <LogOut className="mr-2 h-4 w-4" /> Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
