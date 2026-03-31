@@ -91,6 +91,7 @@ export const api = {
     list: (params?: any) => apiClient.get("/v1/content", { params }),
     get: (id: string) => apiClient.get(`/v1/content/${id}`),
     approve: (id: string) => apiClient.post(`/v1/content/${id}/approve`),
+    reject: (id: string, data: { comment: string }) => apiClient.post(`/v1/content/${id}/reject`, data),
     markPublished: (id: string, data: any) => apiClient.post(`/v1/content/${id}/published`, data),
   },
   analytics: {

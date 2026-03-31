@@ -55,7 +55,7 @@ export default function VideoDetailPage() {
     }
     setIsSubmitting(true);
     try {
-      await apiClient.post(`/v1/content/${params.id}/reject`, { comment: approvalComment });
+      await api.content.reject(params.id as string, { comment: approvalComment });
       toast.warning("视频已驳回");
       setStatus("Rejected");
     } catch (err) {
