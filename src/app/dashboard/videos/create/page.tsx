@@ -43,10 +43,7 @@ export default function CreateVideoPage() {
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        const res = await api.brand.get();
-        // Since api.brand.get might return a single brand or list based on PRD, 
-        // but legacy BrandAPI.getBrands exists, I'll use that if possible or mock for now
-        // if API fails.
+        const res = await api.brand.list();
         if (res.data) {
           setBrands(Array.isArray(res.data) ? res.data : [res.data]);
         }

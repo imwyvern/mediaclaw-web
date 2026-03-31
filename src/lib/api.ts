@@ -89,38 +89,42 @@ export interface EnterpriseRegisterData {
 // Unified API Client
 export const api = {
   content: {
-    list: (params?: any) => apiClient.get("/v1/content", { params }),
-    get: (id: string) => apiClient.get(`/v1/content/${id}`),
-    approve: (id: string) => apiClient.post(`/v1/content/${id}/approve`),
-    reject: (id: string, data: { comment: string }) => apiClient.post(`/v1/content/${id}/reject`, data),
-    markPublished: (id: string, data: any) => apiClient.post(`/v1/content/${id}/published`, data),
+    list: (params?: any) => apiClient.get("/v1/content-mgmt", { params }),
+    get: (id: string) => apiClient.get(`/v1/content-mgmt/${id}`),
+    approve: (id: string) => apiClient.post(`/v1/content-mgmt/${id}/approve`),
+    reject: (id: string, data: { comment: string }) =>
+      apiClient.post(`/v1/content-mgmt/${id}/review`, {
+        action: "reject",
+        comment: data.comment,
+      }),
+    markPublished: (id: string, data: any) => apiClient.post(`/v1/content-mgmt/${id}/published`, data),
   },
   analytics: {
     overview: () => apiClient.get("/v1/analytics/overview"),
     trends: (params?: any) => apiClient.get("/v1/analytics/trends", { params }),
   },
   brand: {
-    list: () => apiClient.get("/v1/brands"),
-    get: (id?: string) => id ? apiClient.get(`/v1/brands/${id}`) : apiClient.get("/v1/brand"),
-    create: (data: any) => apiClient.post("/v1/brands", data),
-    update: (data: any) => apiClient.patch("/v1/brand", data),
-    uploadAsset: (file: File) => {
+    list: () => apiClient.get("/v1/brand"),
+    get: (id?: string) => id ? apiClient.get(`/v1/brand/${id}`) : apiClient.get("/v1/brand"),
+    create: (data: any) => apiClient.post("/v1/brand", data),
+    update: (id: string, data: any) => apiClient.patch(`/v1/brand/${id}`, data),
+    uploadAsset: (id: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      return apiClient.post("/v1/brand/assets", formData, {
+      return apiClient.patch(`/v1/brand/${id}/assets`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
     },
   },
   tasks: {
-    create: (data: any) => apiClient.post("/v1/tasks", data),
-    get: (id: string) => apiClient.get(`/v1/tasks/${id}`),
-    list: (params?: any) => apiClient.get("/v1/tasks", { params }),
+    create: (data: any) => apiClient.post("/v1/video/task", data),
+    get: (id: string) => apiClient.get(`/v1/video/task/${id}`),
+    list: (params?: any) => apiClient.get("/v1/video/task", { params }),
   },
   campaigns: {
-    list: () => apiClient.get("/v1/campaigns"),
-    get: (id: string) => apiClient.get(`/v1/campaigns/${id}`),
-    create: (data: any) => apiClient.post("/v1/campaigns", data),
+    list: () => apiClient.get("/v1/campaign"),
+    get: (id: string) => apiClient.get(`/v1/campaign/${id}`),
+    create: (data: any) => apiClient.post("/v1/campaign", data),
   },
   account: {
     info: () => apiClient.get("/v1/account"),
@@ -139,7 +143,7 @@ export const VideoAPI = {
   getVideo: api.content.get,
 };
 export const BrandAPI = {
-  getBrands: () => apiClient.get("/v1/brands"), // Note: brand.get vs brands.list
+  getBrands: () => apiClient.get("/v1/brand"),
 };
 export const AnalyticsAPI = {
   getAnalytics: api.analytics.overview,
