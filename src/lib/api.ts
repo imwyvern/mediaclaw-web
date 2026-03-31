@@ -2,7 +2,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { getCookie, setCookie, eraseCookie } from "./cookies";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://8.129.133.52/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -150,4 +150,3 @@ export const BillingAPI = {
 export const ProfileAPI = {
   getProfile: api.account.info,
 };
-
