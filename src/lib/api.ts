@@ -99,7 +99,9 @@ export const api = {
     trends: (params?: any) => apiClient.get("/v1/analytics/trends", { params }),
   },
   brand: {
-    get: () => apiClient.get("/v1/brand"),
+    list: () => apiClient.get("/v1/brands"),
+    get: (id?: string) => id ? apiClient.get(`/v1/brands/${id}`) : apiClient.get("/v1/brand"),
+    create: (data: any) => apiClient.post("/v1/brands", data),
     update: (data: any) => apiClient.patch("/v1/brand", data),
     uploadAsset: (file: File) => {
       const formData = new FormData();
