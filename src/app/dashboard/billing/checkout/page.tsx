@@ -1,21 +1,23 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, CreditCard, QrCode, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, QrCode, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 const PACKS = [
-  { id: "pack_1", name: "Small Pack", videos: 10, price: 99, unitPrice: 9.9, popular: false },
-  { id: "pack_2", name: "Standard Pack", videos: 50, price: 399, unitPrice: 7.98, popular: true },
-  { id: "pack_3", name: "Business Pack", videos: 200, price: 1299, unitPrice: 6.49, popular: false },
-  { id: "pack_4", name: "Enterprise Pack", videos: 500, price: 2999, unitPrice: 5.99, popular: false },
+  { id: "trial", name: "体验包", videos: 1, price: 9.9, unitPrice: 9.9, popular: false },
+  { id: "single", name: "单条包", videos: 1, price: 29, unitPrice: 29, popular: false },
+  { id: "pack_10", name: "进阶包", videos: 10, price: 199, unitPrice: 19.9, popular: true },
+  { id: "pack_30", name: "专业包", videos: 30, price: 499, unitPrice: 16.6, popular: false },
+  { id: "pack_100", name: "企业包", videos: 100, price: 1299, unitPrice: 12.99, popular: false },
 ];
 
 const ORDER_HISTORY = [
@@ -29,8 +31,7 @@ export default function CheckoutPage() {
   const [step, setStep] = useState<"select" | "pay" | "success">("select");
   const [paymentMethod, setPaymentMethod] = useState<"wechat" | "alipay">("wechat");
   const [isPolling, setIsPolling] = useState(false);
-
-  const orderId = useMemo(() => `MediaClaw_${Math.random().toString(36).substr(2, 9).toUpperCase()}`, []);
+  const [orderId] = useState(() => `MediaClaw_${Math.random().toString(36).substring(2, 11).toUpperCase()}`);
 
   const pack = PACKS.find(p => p.id === selectedPack)!;
 
@@ -71,6 +72,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
+      <MetadataUpdater title="购买算力" />
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => step === "pay" ? setStep("select") : router.back()}>
           <ArrowLeft className="w-5 h-5" />
