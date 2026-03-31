@@ -1,16 +1,17 @@
 import axios from "axios";
 import { toast } from "sonner";
+import { getCookie, setCookie, eraseCookie } from "./cookies";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://8.129.133.52/api";
 
-export const api = axios.create({
+export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 });
 
-api.interceptors.request.use(
+apiClient.interceptors.request.use(
   (config) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    const token = typeof window !== "undefined" ? getCookie("auth_token") : null;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,23 +20,23 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-api.interceptors.response.use(
+apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const refreshToken = localStorage.getItem("refresh_token");
-        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { token: refreshToken });
+        const refreshToken = getCookie("refresh_token");
+        const res = await axios.post(`${API_BASE_URL}/v1/auth/refresh`, { token: refreshToken });
         if (res.data.token) {
-          localStorage.setItem("auth_token", res.data.token);
+          setCookie("auth_token", res.data.token, 7);
           originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
-          return api(originalRequest);
+          return apiClient(originalRequest);
         }
-      } catch (err) {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("refresh_token");
+      } catch {
+        eraseCookie("auth_token");
+        eraseCookie("refresh_token");
         if (typeof window !== "undefined") {
           window.location.href = "/auth";
         }
@@ -74,6 +75,8 @@ export interface Brand {
   pipelines: number;
   videos: number;
   logo: string;
+  colors?: string[];
+  fonts?: string[];
 }
 
 export interface EnterpriseRegisterData {
@@ -82,29 +85,59 @@ export interface EnterpriseRegisterData {
   adminPhone: string;
 }
 
-// API functions
-export const AuthAPI = {
-  login: (phone: string, code: string) => api.post<{ token: string; user: User }>("/auth/login", { phone, code }),
-  registerEnterprise: (data: EnterpriseRegisterData) => api.post("/auth/enterprise/register", data),
+// Unified API Client
+export const api = {
+  content: {
+    list: (params?: any) => apiClient.get("/v1/content", { params }),
+    get: (id: string) => apiClient.get(`/v1/content/${id}`),
+    approve: (id: string) => apiClient.post(`/v1/content/${id}/approve`),
+    markPublished: (id: string, data: any) => apiClient.post(`/v1/content/${id}/published`, data),
+  },
+  analytics: {
+    overview: () => apiClient.get("/v1/analytics/overview"),
+    trends: (params?: any) => apiClient.get("/v1/analytics/trends", { params }),
+  },
+  brand: {
+    get: () => apiClient.get("/v1/brand"),
+    update: (data: any) => apiClient.patch("/v1/brand", data),
+    uploadAsset: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return apiClient.post("/v1/brand/assets", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    },
+  },
+  tasks: {
+    create: (data: any) => apiClient.post("/v1/tasks", data),
+    get: (id: string) => apiClient.get(`/v1/tasks/${id}`),
+  },
+  account: {
+    info: () => apiClient.get("/v1/account"),
+    usage: () => apiClient.get("/v1/account/usage"),
+  },
+  auth: {
+    login: (phone: string, code: string) => apiClient.post<{ token: string; user: User }>("/v1/auth/login", { phone, code }),
+    registerEnterprise: (data: EnterpriseRegisterData) => apiClient.post("/v1/auth/enterprise/register", data),
+  }
 };
 
+// Legacy API exports for backward compatibility (optional but safer)
+export const AuthAPI = api.auth;
 export const VideoAPI = {
-  getVideos: (params?: Record<string, string | number | boolean>) => api.get<Video[]>("/videos", { params }),
-  getVideo: (id: string) => api.get<Video>(`/videos/${id}`),
+  getVideos: api.content.list,
+  getVideo: api.content.get,
 };
-
 export const BrandAPI = {
-  getBrands: () => api.get<Brand[]>("/brands"),
+  getBrands: () => apiClient.get("/v1/brands"), // Note: brand.get vs brands.list
 };
-
 export const AnalyticsAPI = {
-  getAnalytics: () => api.get("/analytics"),
+  getAnalytics: api.analytics.overview,
 };
-
 export const BillingAPI = {
-  getOrders: () => api.get("/billing/orders"),
+  getOrders: () => apiClient.get("/v1/billing/orders"),
+};
+export const ProfileAPI = {
+  getProfile: api.account.info,
 };
 
-export const ProfileAPI = {
-  getProfile: () => api.get<User>("/users/me"),
-};
