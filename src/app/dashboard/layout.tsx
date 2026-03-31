@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Home,
   Plus,
-  ListTodo
+  ListTodo,
+  Layers
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -49,6 +50,7 @@ import { eraseCookie } from "@/lib/cookies";
 
 const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Content", href: "/dashboard/content", icon: Layers },
   { name: "Videos", href: "/dashboard/videos", icon: Film },
   { name: "Tasks", href: "/dashboard/videos/tasks", icon: ListTodo },
   { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
