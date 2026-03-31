@@ -25,6 +25,14 @@ export default function AuthPage() {
   const [code, setCode] = useState("");
   const [timer, setTimer] = useState(0);
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [registerTimer, setRegisterTimer] = useState(0);
+  const [registerForm, setRegisterForm] = useState({
+    orgName: "",
+    industry: "",
+    adminPhone: "",
+    code: "",
+  });
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
@@ -36,7 +44,23 @@ export default function AuthPage() {
     return () => clearInterval(interval);
   }, [timer]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (registerTimer > 0) {
+      interval = setInterval(() => setRegisterTimer((t) => t - 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [registerTimer]);
+
   const startTimer = () => setTimer(60);
+  const startRegisterTimer = () => setRegisterTimer(60);
+
+  const updateRegisterForm = (field: keyof typeof registerForm, value: string) => {
+    setRegisterForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
 
   const handleSendCode = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
@@ -82,31 +106,78 @@ export default function AuthPage() {
     }
   };
 
-  const handleWeChatLogin = () => {
+  const handleRegisterSendCode = async () => {
+    if (!registerForm.adminPhone || registerForm.adminPhone.length < 11) {
+      toast.error("请输入有效的管理员手机号");
+      return;
+    }
+
     setIsLoading(true);
-    toast.info("正在跳转至微信授权...");
-    
-    // Mock OAuth Redirect
-    setTimeout(() => {
-      // Simulate callback with URL params
-      toast.success("微信授权成功！");
-      
-      // Mock login with WeChat
-      setTimeout(() => {
-        const mockToken = "mock_wechat_token";
-        setCookie("auth_token", mockToken, 7);
-        login({ 
-          id: "usr_wechat", 
-          name: "微信用户", 
-          email: "", 
-          phone: "", 
-          role: "user",
-          wechatId: "wx_openid_123"
-        }, mockToken);
-        setIsLoading(false);
-        router.push("/dashboard/onboarding");
-      }, 1000);
-    }, 1500);
+    try {
+      await api.auth.sendCode(registerForm.adminPhone);
+      startRegisterTimer();
+      toast.success("验证码已发送至 " + registerForm.adminPhone);
+    } catch (err) {
+      console.error("Failed to send enterprise SMS code:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!registerForm.orgName.trim()) {
+      toast.error("请输入企业名称");
+      return;
+    }
+
+    if (!registerForm.industry) {
+      toast.error("请选择所属行业");
+      return;
+    }
+
+    if (!registerForm.adminPhone || registerForm.adminPhone.length < 11) {
+      toast.error("请输入有效的管理员手机号");
+      return;
+    }
+
+    if (registerForm.code.length !== 6) {
+      toast.error("请输入6位验证码");
+      return;
+    }
+
+    if (!agreedToTerms) {
+      toast.error("请先同意服务协议与隐私政策");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await api.auth.verifyCode(registerForm.adminPhone, registerForm.code);
+
+      const res = await api.auth.registerEnterprise({
+        orgName: registerForm.orgName.trim(),
+        industry: registerForm.industry,
+        adminPhone: registerForm.adminPhone,
+      });
+      const { accessToken, refreshToken, user } = res.data;
+
+      setCookie("auth_token", accessToken, 7);
+      setCookie("refresh_token", refreshToken, 7);
+      login(user, accessToken);
+
+      toast.success("企业空间创建成功");
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Failed to register enterprise:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWeChatLogin = () => {
+    toast.info("微信登录暂未开放，请先使用短信验证码登录");
   };
 
   return (
@@ -120,7 +191,7 @@ export default function AuthPage() {
           MediaClaw
         </div>
 
-        <Tabs defaultValue="login" className="w-full" onValueChange={(v) => setMode(v as "login" | "register")}>
+        <Tabs value={mode} className="w-full" onValueChange={(v) => setMode(v as "login" | "register")}>
           <TabsList className="grid w-full grid-cols-2 mb-8 h-12 p-1 bg-muted/50">
             <TabsTrigger value="login" className="text-sm">个人登录</TabsTrigger>
             <TabsTrigger value="register" className="text-sm">企业注册</TabsTrigger>
@@ -212,12 +283,11 @@ export default function AuthPage() {
                   variant="outline" 
                   className="w-full h-12 border-[#07C160] text-[#07C160] hover:bg-[#07C160] hover:text-white transition-colors"
                   onClick={handleWeChatLogin}
-                  disabled={isLoading}
                 >
                   <svg className="w-5 h-5 mr-2 fill-current" viewBox="0 0 24 24">
                     <path d="M8.225 3.518c-4.482 0-8.117 3.257-8.117 7.276 0 2.21 1.107 4.183 2.85 5.568-.158.577-1.026 2.05-1.066 2.12-.04.07-.028.163.03.22.035.035.093.06.15.06h.058c.07 0 2.378-.455 3.322-.922.88.243 1.81.378 2.773.378.11 0 .22-.004.332-.01-4.14-.383-7.406-3.418-7.406-7.143 0-3.95 3.69-7.152 8.24-7.152 4.55 0 8.24 3.202 8.24 7.152 0 .546-.07 1.074-.202 1.577 1.07.72 1.83 1.765 2.14 2.96.26-.64.407-1.343.407-2.078 0-5.51-5.188-9.978-11.583-9.978zm10.375 7.97c-3.64 0-6.59 2.645-6.59 5.908 0 1.795.898 3.398 2.314 4.522-.128.47-.833 1.666-.865 1.723-.033.056-.023.132.025.178.028.028.075.048.122.048h.047c.057 0 1.93-.37 2.698-.75.714.198 1.47.307 2.25.307 3.64 0 6.59-2.645 6.59-5.908s-2.95-5.908-6.59-5.908z"/>
                   </svg>
-                  微信扫码登录
+                  微信登录即将开放
                 </Button>
               </CardContent>
             </Card>
@@ -230,14 +300,24 @@ export default function AuthPage() {
                 <CardDescription className="text-base">享受更强大的算力支持与团队协作功能。</CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-0 pt-4">
-                <form className="space-y-4">
+                <form className="space-y-4" onSubmit={handleRegister}>
                   <div className="space-y-2">
                     <Label htmlFor="orgName">企业名称</Label>
-                    <Input id="orgName" placeholder="例如：某某科技有限公司" className="h-12" required />
+                    <Input
+                      id="orgName"
+                      placeholder="例如：某某科技有限公司"
+                      className="h-12"
+                      value={registerForm.orgName}
+                      onChange={(e) => updateRegisterForm("orgName", e.target.value)}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="industry">所属行业</Label>
-                    <Select>
+                    <Select
+                      value={registerForm.industry}
+                      onValueChange={(value) => updateRegisterForm("industry", value ?? "")}
+                    >
                       <SelectTrigger className="h-12">
                         <SelectValue placeholder="请选择行业" />
                       </SelectTrigger>
@@ -252,24 +332,49 @@ export default function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="adminPhone">管理员手机号</Label>
-                    <Input id="adminPhone" type="tel" placeholder="请输入手机号" className="h-12" required />
+                    <Input
+                      id="adminPhone"
+                      type="tel"
+                      placeholder="请输入手机号"
+                      className="h-12"
+                      value={registerForm.adminPhone}
+                      onChange={(e) => updateRegisterForm("adminPhone", e.target.value.replace(/\D/g, "").slice(0, 11))}
+                      required
+                    />
                   </div>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <Input placeholder="验证码" className="h-12" />
+                      <Input
+                        placeholder="验证码"
+                        className="h-12"
+                        maxLength={6}
+                        value={registerForm.code}
+                        onChange={(e) => updateRegisterForm("code", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        required
+                      />
                     </div>
-                    <Button variant="outline" type="button" className="h-12 px-4 whitespace-nowrap">
-                      获取验证码
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="h-12 px-4 whitespace-nowrap"
+                      disabled={isLoading || registerTimer > 0}
+                      onClick={() => void handleRegisterSendCode()}
+                    >
+                      {registerTimer > 0 ? `${registerTimer}秒后重发` : "获取验证码"}
                     </Button>
                   </div>
                   <div className="flex items-center space-x-2 pt-2">
-                    <Checkbox id="terms" />
+                    <Checkbox
+                      id="terms"
+                      checked={agreedToTerms}
+                      onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                    />
                     <label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-muted-foreground">
                       我已阅读并同意 <a href="#" className="text-primary hover:underline">《服务协议》</a> 和 <a href="#" className="text-primary hover:underline">《隐私政策》</a>
                     </label>
                   </div>
-                  <Button type="button" className="w-full h-12 text-base mt-4" onClick={() => toast.success("申请已提交，我们将尽快与您联系")}>
-                    提交注册申请
+                  <Button type="submit" className="w-full h-12 text-base mt-4" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : "验证并创建企业空间"}
                   </Button>
                 </form>
               </CardContent>
@@ -279,9 +384,9 @@ export default function AuthPage() {
         
         <div className="mt-8 text-center text-sm text-muted-foreground">
           {mode === "login" ? (
-            <p>没有账号？ <button onClick={() => {}} className="text-primary font-medium hover:underline">立即注册</button></p>
+            <p>没有账号？ <button onClick={() => setMode("register")} className="text-primary font-medium hover:underline">立即注册</button></p>
           ) : (
-            <p>已有企业账号？ <button onClick={() => {}} className="text-primary font-medium hover:underline">点此登录</button></p>
+            <p>已有企业账号？ <button onClick={() => setMode("login")} className="text-primary font-medium hover:underline">点此登录</button></p>
           )}
         </div>
       </div>

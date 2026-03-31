@@ -27,10 +27,10 @@ export type WSEventData = {
 class WebSocketManager {
   private socket: WebSocket | null = null;
   private url: string;
-  private listeners: Map<WSEvent, Set<(data: any) => void>> = new Map();
+  private listeners: Map<WSEvent, Set<(data: never) => void>> = new Map();
 
-  constructor(url: string = "wss://api.mediaclaw.com/ws") {
-    this.url = url;
+  constructor(url?: string) {
+    this.url = url || this.getDefaultUrl();
   }
 
   connect() {
@@ -39,6 +39,15 @@ class WebSocketManager {
     // Mocking WebSocket for now
     console.log("Connecting to WebSocket:", this.url);
     this.simulateConnection();
+  }
+
+  private getDefaultUrl() {
+    if (typeof window !== "undefined") {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      return `${protocol}://${window.location.host}/ws`;
+    }
+
+    return process.env.NEXT_PUBLIC_WS_URL || "ws://localhost/ws";
   }
 
   private simulateConnection() {
@@ -59,16 +68,16 @@ class WebSocketManager {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(callback);
+    this.listeners.get(event)!.add(callback as (data: never) => void);
     return () => this.off(event, callback);
   }
 
   off<K extends WSEvent>(event: K, callback: (data: WSEventData[K]) => void) {
-    this.listeners.get(event)?.delete(callback);
+    this.listeners.get(event)?.delete(callback as (data: never) => void);
   }
 
   private emit<K extends WSEvent>(event: K, data: WSEventData[K]) {
-    this.listeners.get(event)?.forEach((callback) => callback(data));
+    this.listeners.get(event)?.forEach((callback) => callback(data as never));
     
     // Global toast for certain events
     if (event === "video_completed") {

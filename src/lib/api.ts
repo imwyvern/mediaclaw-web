@@ -4,6 +4,25 @@ import { getCookie, setCookie, eraseCookie } from "./cookies";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
+interface ApiEnvelope<T> {
+  code?: number;
+  message?: string;
+  data: T;
+}
+
+function unwrapApiData<T>(payload: T | ApiEnvelope<T>): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    ("code" in payload || "message" in payload)
+  ) {
+    return (payload as ApiEnvelope<T>).data;
+  }
+
+  return payload as T;
+}
+
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
@@ -21,20 +40,29 @@ apiClient.interceptors.request.use(
 );
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => ({
+    ...response,
+    data: unwrapApiData(response.data),
+  }),
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
         const refreshToken = getCookie("refresh_token");
-        const res = await axios.post(`${API_BASE_URL}/v1/auth/refresh`, { refreshToken });
-        if (res.data.accessToken) {
-          setCookie("auth_token", res.data.accessToken, 7);
-          if (res.data.refreshToken) {
-            setCookie("refresh_token", res.data.refreshToken, 7);
+        const res = await axios.post<ApiEnvelope<{ accessToken: string; refreshToken?: string }>>(
+          `${API_BASE_URL}/v1/auth/refresh`,
+          { refreshToken }
+        );
+        const authData = unwrapApiData(res.data);
+
+        if (authData.accessToken) {
+          setCookie("auth_token", authData.accessToken, 7);
+          if (authData.refreshToken) {
+            setCookie("refresh_token", authData.refreshToken, 7);
           }
-          originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${authData.accessToken}`;
           return apiClient(originalRequest);
         }
       } catch {
@@ -99,28 +127,49 @@ export interface AuthResponse {
   isNewUser: boolean;
 }
 
+type AnalyticsPeriod = "daily" | "weekly" | "monthly";
+
+function normalizeAnalyticsPeriod(timeframe?: string): AnalyticsPeriod | undefined {
+  switch (timeframe) {
+    case "7d":
+      return "daily";
+    case "30d":
+      return "weekly";
+    case "90d":
+      return "monthly";
+    default:
+      return undefined;
+  }
+}
+
 // Unified API Client
 export const api = {
   content: {
-    list: (params?: any) => apiClient.get("/v1/content-mgmt", { params }),
-    get: (id: string) => apiClient.get(`/v1/content-mgmt/${id}`),
-    approve: (id: string) => apiClient.post(`/v1/content-mgmt/${id}/approve`),
+    list: (params?: any) => apiClient.get("/v1/content", { params }),
+    get: (id: string) => apiClient.get(`/v1/content/${id}`),
+    approve: (id: string) => apiClient.post(`/v1/content/${id}/approve`),
     reject: (id: string, data: { comment: string }) =>
-      apiClient.post(`/v1/content-mgmt/${id}/review`, {
+      apiClient.post(`/v1/content/${id}/review`, {
         action: "reject",
         comment: data.comment,
       }),
-    markPublished: (id: string, data: any) => apiClient.post(`/v1/content-mgmt/${id}/published`, data),
+    markPublished: (id: string, data: any) => apiClient.post(`/v1/content/${id}/published`, data),
   },
   analytics: {
     overview: () => apiClient.get("/v1/analytics/overview"),
-    trends: (params?: any) => apiClient.get("/v1/analytics/trends", { params }),
+    trends: (params?: { period?: AnalyticsPeriod; timeframe?: string }) => {
+      const period = params?.period || normalizeAnalyticsPeriod(params?.timeframe);
+      return apiClient.get("/v1/analytics/trends", {
+        params: period ? { period } : undefined,
+      });
+    },
   },
   brand: {
     list: () => apiClient.get("/v1/brand"),
     get: (id?: string) => id ? apiClient.get(`/v1/brand/${id}`) : apiClient.get("/v1/brand"),
     create: (data: any) => apiClient.post("/v1/brand", data),
     update: (id: string, data: any) => apiClient.patch(`/v1/brand/${id}`, data),
+    remove: (id: string) => apiClient.delete(`/v1/brand/${id}`),
     uploadAsset: (id: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);
@@ -130,18 +179,53 @@ export const api = {
     },
   },
   tasks: {
-    create: (data: any) => apiClient.post("/v1/video/task", data),
-    get: (id: string) => apiClient.get(`/v1/video/task/${id}`),
-    list: (params?: any) => apiClient.get("/v1/video/task", { params }),
+    create: (data: any) => apiClient.post("/v1/video", data),
+    get: (id: string) => apiClient.get(`/v1/video/${id}`),
+    list: (params?: any) => apiClient.get("/v1/video", { params }),
   },
   campaigns: {
     list: () => apiClient.get("/v1/campaign"),
     get: (id: string) => apiClient.get(`/v1/campaign/${id}`),
     create: (data: any) => apiClient.post("/v1/campaign", data),
+    update: (id: string, data: any) => apiClient.patch(`/v1/campaign/${id}`, data),
+    remove: (id: string) => apiClient.delete(`/v1/campaign/${id}`),
   },
   account: {
     info: () => apiClient.get("/v1/account"),
     usage: () => apiClient.get("/v1/account/usage"),
+    updateProfile: (data: any) => apiClient.patch("/v1/account/profile", data),
+  },
+  platformAccounts: {
+    list: () => apiClient.get("/v1/platform-accounts"),
+    get: (id: string) => apiClient.get(`/v1/platform-accounts/${id}`),
+    create: (data: any) => apiClient.post("/v1/platform-accounts", data),
+    sync: (id: string) => apiClient.post(`/v1/platform-accounts/${id}/sync`),
+    history: (id: string, params?: any) => apiClient.get(`/v1/platform-accounts/${id}/history`, { params }),
+    remove: (id: string) => apiClient.delete(`/v1/platform-accounts/${id}`),
+  },
+  billing: {
+    balance: () => apiClient.get("/v1/billing/balance"),
+    orders: (params?: any) => apiClient.get("/v1/billing/orders", { params }),
+  },
+  payment: {
+    products: () => apiClient.get("/v1/payment/products"),
+    create: (data: any) => apiClient.post("/v1/payment/create", data),
+    orders: (params?: any) => apiClient.get("/v1/payment/orders", { params }),
+    status: (orderId: string) => apiClient.get(`/v1/payment/status/${orderId}`),
+  },
+  apikey: {
+    list: () => apiClient.get("/v1/apikey"),
+    create: (data: any) => apiClient.post("/v1/apikey", data),
+    revoke: (id: string) => apiClient.delete(`/v1/apikey/${id}`),
+  },
+  skill: {
+    config: (agentId: string) => apiClient.get("/v1/skill/config", { params: { agentId } }),
+    register: (data: { agentId: string; capabilities?: string[] }) => apiClient.post("/v1/skill/register", data),
+    deliveries: (agentId: string) => apiClient.get("/v1/skill/deliveries", { params: { agentId } }),
+    confirmDelivery: (data: { agentId: string; taskId: string }) =>
+      apiClient.post("/v1/skill/confirm-delivery", data),
+    feedback: (data: { agentId: string; taskId: string; feedback: Record<string, any> }) =>
+      apiClient.post("/v1/skill/feedback", data),
   },
   auth: {
     sendCode: (phone: string) => apiClient.post("/v1/auth/sms/send", { phone }),
@@ -166,7 +250,8 @@ export const AnalyticsAPI = {
   getAnalytics: api.analytics.overview,
 };
 export const BillingAPI = {
-  getOrders: () => apiClient.get("/v1/billing/orders"),
+  getBalance: api.billing.balance,
+  getOrders: api.billing.orders,
 };
 export const ProfileAPI = {
   getProfile: api.account.info,
