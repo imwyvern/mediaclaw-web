@@ -9,10 +9,8 @@ import {
   Play, 
   MoreVertical, 
   Download, 
-  Film, 
   Loader2, 
   Trash2, 
-  Edit3, 
   FileVideo 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +26,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FilterSystem } from "@/components/filter-system";
 import { toast } from "sonner";
 import Link from "next/link";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 type VideoStatus = "Completed" | "Processing" | "Failed";
 
@@ -115,6 +114,7 @@ export default function VideosPage() {
 
   return (
     <div className="flex flex-col gap-8 pb-10">
+      <MetadataUpdater title="我的视频" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">我的视频</h1>
@@ -129,7 +129,9 @@ export default function VideosPage() {
             description="导出您的视频生产日志及相关元数据。"
             onExport={handleExport}
           />
-          <Button><Plus className="w-4 h-4 mr-2" /> 新建视频</Button>
+          <Link href="/dashboard/videos/create">
+            <Button><Plus className="w-4 h-4 mr-2" /> 新建视频</Button>
+          </Link>
         </div>
       </div>
 
