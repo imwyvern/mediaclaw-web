@@ -13,6 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
+import { MetadataUpdater } from "@/components/metadata-updater";
+import { api } from "@/lib/api";
+import { setCookie } from "@/lib/cookies";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -35,20 +38,24 @@ export default function AuthPage() {
 
   const startTimer = () => setTimer(60);
 
-  const handleSendCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendCode = async (event?: React.FormEvent | React.MouseEvent) => {
+    event?.preventDefault();
     if (!phone || phone.length < 11) {
       toast.error("请输入有效的手机号");
       return;
     }
+
     setIsLoading(true);
-    // Mock API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await api.auth.sendCode(phone);
       setStep("code");
       startTimer();
       toast.success("验证码已发送至 " + phone);
-    }, 1000);
+    } catch (err) {
+      console.error("Failed to send SMS code:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleVerify = async (e: React.FormEvent) => {
@@ -58,19 +65,21 @@ export default function AuthPage() {
       return;
     }
     setIsLoading(true);
-    // Mock login
-    setTimeout(() => {
-      login({ 
-        id: "usr_1", 
-        name: phone.slice(-4), 
-        email: "", 
-        phone, 
-        role: "user" 
-      }, "mock_token");
+    try {
+      const res = await api.auth.verifyCode(phone, code);
+      const { accessToken, refreshToken, user, isNewUser } = res.data;
+
+      setCookie("auth_token", accessToken, 7);
+      setCookie("refresh_token", refreshToken, 7);
+      login(user, accessToken);
+
       setIsLoading(false);
-      toast.success("欢迎回来！");
-      router.push("/dashboard/onboarding");
-    }, 1500);
+      toast.success(isNewUser ? "注册成功，欢迎使用！" : "欢迎回来！");
+      router.push(isNewUser ? "/dashboard/onboarding" : "/dashboard");
+    } catch (err) {
+      console.error("Failed to verify SMS code:", err);
+      setIsLoading(false);
+    }
   };
 
   const handleWeChatLogin = () => {
@@ -84,6 +93,8 @@ export default function AuthPage() {
       
       // Mock login with WeChat
       setTimeout(() => {
+        const mockToken = "mock_wechat_token";
+        setCookie("auth_token", mockToken, 7);
         login({ 
           id: "usr_wechat", 
           name: "微信用户", 
@@ -91,7 +102,7 @@ export default function AuthPage() {
           phone: "", 
           role: "user",
           wechatId: "wx_openid_123"
-        }, "mock_wechat_token");
+        }, mockToken);
         setIsLoading(false);
         router.push("/dashboard/onboarding");
       }, 1000);
@@ -100,6 +111,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+      <MetadataUpdater title="登录 / 注册" description="登录您的 MediaClaw 账号，开启自动化视频生产。" />
       <div className="flex flex-col justify-center p-8 sm:p-12 lg:p-24 w-full max-w-xl mx-auto lg:mx-0">
         <div className="flex items-center gap-2 font-bold text-xl mb-12">
           <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground">
@@ -177,7 +189,7 @@ export default function AuthPage() {
                         variant="link" 
                         type="button" 
                         disabled={timer > 0 || isLoading}
-                        onClick={handleSendCode}
+                        onClick={() => void handleSendCode()}
                         className="text-sm"
                       >
                         {timer > 0 ? `${timer}秒后重发` : "重新获取验证码"}

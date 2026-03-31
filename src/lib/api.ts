@@ -28,10 +28,13 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const refreshToken = getCookie("refresh_token");
-        const res = await axios.post(`${API_BASE_URL}/v1/auth/refresh`, { token: refreshToken });
-        if (res.data.token) {
-          setCookie("auth_token", res.data.token, 7);
-          originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
+        const res = await axios.post(`${API_BASE_URL}/v1/auth/refresh`, { refreshToken });
+        if (res.data.accessToken) {
+          setCookie("auth_token", res.data.accessToken, 7);
+          if (res.data.refreshToken) {
+            setCookie("refresh_token", res.data.refreshToken, 7);
+          }
+          originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;
           return apiClient(originalRequest);
         }
       } catch {
@@ -53,10 +56,13 @@ apiClient.interceptors.response.use(
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
   role: "user" | "admin";
   wechatId?: string;
+  orgId?: string | null;
+  userType?: string;
+  avatarUrl?: string;
 }
 
 export interface Video {
@@ -84,6 +90,13 @@ export interface EnterpriseRegisterData {
   orgName: string;
   industry: string;
   adminPhone: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+  isNewUser: boolean;
 }
 
 // Unified API Client
@@ -131,7 +144,11 @@ export const api = {
     usage: () => apiClient.get("/v1/account/usage"),
   },
   auth: {
-    login: (phone: string, code: string) => apiClient.post<{ token: string; user: User }>("/v1/auth/login", { phone, code }),
+    sendCode: (phone: string) => apiClient.post("/v1/auth/sms/send", { phone }),
+    verifyCode: (phone: string, code: string) =>
+      apiClient.post<AuthResponse>("/v1/auth/sms/verify", { phone, code }),
+    login: (phone: string, code: string) =>
+      apiClient.post<AuthResponse>("/v1/auth/sms/verify", { phone, code }),
     registerEnterprise: (data: EnterpriseRegisterData) => apiClient.post("/v1/auth/enterprise/register", data),
   }
 };
