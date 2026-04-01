@@ -8,12 +8,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 export default function PricingPage() {
   const [tier, setTier] = useState<"individual" | "enterprise">("individual");
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
+      <MetadataUpdater title="价格方案" description="选择最适合您的 MediaClaw 订阅方案。" />
       <header className="px-6 h-16 flex items-center border-b justify-between sticky top-0 bg-background/80 backdrop-blur z-50">
         <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tighter">
           <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground">

@@ -188,11 +188,11 @@ export default function AuthPage() {
     <div className="relative flex min-h-screen w-full bg-background lg:overflow-hidden">
       <MetadataUpdater title="登录 / 注册" description="登录您的 MediaClaw 账号，开启自动化视频生产。" />
 
-      <div className="relative flex w-full flex-col items-center overflow-y-auto py-12 lg:w-[56%] lg:justify-center lg:py-10">
+      <div className="relative flex w-full flex-col items-center overflow-y-auto py-12 lg:w-[60%] lg:justify-center lg:py-10">
         <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-56 bg-gradient-to-b from-primary/[0.08] to-transparent lg:block" />
         <div className="pointer-events-none absolute left-[-12%] top-24 hidden h-72 w-72 rounded-full bg-primary/[0.08] blur-3xl lg:block" />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col px-4 sm:px-6 lg:px-8">
+        <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col px-4 sm:px-6 lg:px-10">
           <div className="mb-8 flex items-center justify-center gap-3 text-2xl font-bold tracking-tight text-foreground">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
               <Video size={24} />
@@ -200,7 +200,7 @@ export default function AuthPage() {
             MediaClaw
           </div>
 
-          <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-5 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-7">
+          <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-8">
             <Tabs value={mode} className="w-full" onValueChange={(value) => setMode(value as "login" | "register")}>
               <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
                 <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
@@ -316,10 +316,10 @@ export default function AuthPage() {
                 </div>
 
                 <form className="space-y-6" onSubmit={handleRegister}>
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.18] p-4 sm:p-5">
+                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.18] p-4">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Building2 className="h-5 w-5" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Building2 className="h-4 w-4" />
                       </div>
                       <div className="space-y-1">
                         <h2 className="text-sm font-semibold tracking-tight text-foreground">企业信息</h2>
@@ -367,10 +367,10 @@ export default function AuthPage() {
                     </div>
                   </section>
 
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-background p-4 shadow-sm sm:p-5">
+                  <section className="space-y-4 rounded-2xl border border-border/60 bg-background p-4 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <ShieldCheck className="h-5 w-5" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <ShieldCheck className="h-4 w-4" />
                       </div>
                       <div className="space-y-1">
                         <h2 className="text-sm font-semibold tracking-tight text-foreground">管理员验证</h2>
@@ -445,10 +445,10 @@ export default function AuthPage() {
                     </div>
                   </section>
 
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.16] p-4 sm:p-5">
+                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.16] p-4">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Mail className="h-5 w-5" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Mail className="h-4 w-4" />
                       </div>
                       <div className="space-y-1">
                         <h2 className="text-sm font-semibold tracking-tight text-foreground">协议确认</h2>
@@ -492,7 +492,7 @@ export default function AuthPage() {
         </div>
       </div>
 
-      <div className="relative hidden overflow-hidden bg-zinc-950 p-12 text-zinc-50 lg:flex lg:w-[44%] lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-zinc-950 p-12 text-zinc-50 lg:flex lg:w-[40%] lg:flex-col lg:justify-between">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-blue-600/20 opacity-30 mix-blend-overlay" />
         <div className="absolute right-0 top-0 h-[600px] w-[600px] translate-x-1/3 -translate-y-1/4 rounded-full bg-primary/20 blur-[120px]" />
         <div className="absolute bottom-0 left-0 h-[600px] w-[600px] -translate-x-1/3 translate-y-1/3 rounded-full bg-blue-600/20 blur-[120px]" />

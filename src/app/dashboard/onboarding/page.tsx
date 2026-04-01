@@ -7,12 +7,9 @@ import {
   ChevronRight, 
   Upload, 
   Video, 
-  Sparkles, 
   Building2, 
   User, 
-  LayoutGrid, 
   ArrowRight,
-  PartyPopper,
   Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,14 +20,20 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [plan, setPlan] = useState<"individual" | "enterprise" | null>(null);
   const [loading, setLoading] = useState(false);
+  const [brandName, setBrandName] = useState("");
 
   const nextStep = () => {
+    if (step === 2 && !brandName) {
+      toast.error("请输入品牌名称");
+      return;
+    }
     if (step === 4) {
       router.push("/dashboard");
       return;
@@ -49,6 +52,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col items-center py-12 px-4">
+      <MetadataUpdater title="欢迎加入" />
       <div className="max-w-3xl w-full">
         {/* Progress */}
         <div className="mb-12">
@@ -123,7 +127,13 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div className="grid gap-2">
                     <Label htmlFor="b-name">品牌名称</Label>
-                    <Input id="b-name" placeholder="例如：MediaClaw Official" className="h-12" />
+                    <Input 
+                      id="b-name" 
+                      placeholder="例如：MediaClaw Official" 
+                      className="h-12" 
+                      value={brandName}
+                      onChange={(e) => setBrandName(e.target.value)}
+                    />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="b-ind">行业分类</Label>

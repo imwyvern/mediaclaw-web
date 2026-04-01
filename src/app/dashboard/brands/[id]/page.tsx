@@ -1,19 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
   LayoutGrid, 
-  Briefcase, 
   Settings, 
   Film, 
   Upload, 
   Plus, 
   MoreHorizontal, 
-  FileText, 
   Image as ImageIcon,
-  History,
   TrendingUp,
   Activity,
   CheckCircle2
@@ -24,15 +20,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 export default function BrandDetailPage() {
-  const params = useParams();
   const router = useRouter();
 
   return (
     <div className="flex flex-col gap-8">
+      <MetadataUpdater title="品牌详情" />
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="w-5 h-5" />

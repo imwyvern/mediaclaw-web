@@ -3,6 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Check, Play, Zap, BarChart3, Video, Layers } from "lucide-react";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "MediaClaw - Content Infrastructure for Video First SaaS",
+  description: "Manage, process, and analyze video content at scale with MediaClaw API and dashboard.",
+};
 
 export default function LandingPage() {
   return (

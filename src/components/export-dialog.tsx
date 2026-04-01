@@ -32,7 +32,7 @@ const AVAILABLE_FIELDS = [
   { id: "url", label: "Download URL" },
 ];
 
-export function ExportDialog({ title, description, onExport, trigger }: ExportDialogProps) {
+export function ExportDialog({ title, description, onExport }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ExportConfig["format"]>("csv");
   const [dateRange, setDateRange] = useState("30d");
@@ -55,7 +55,7 @@ export function ExportDialog({ title, description, onExport, trigger }: ExportDi
       await onExport({ format, dateRange, fields: selectedFields });
       toast.success("Export started. Your file will be ready shortly.");
       setOpen(false);
-    } catch (err) {
+    } catch {
       toast.error("Export failed. Please try again.");
     } finally {
       setLoading(false);
@@ -82,7 +82,7 @@ export function ExportDialog({ title, description, onExport, trigger }: ExportDi
             ].map((f) => (
               <div 
                 key={f.id}
-                onClick={() => setFormat(f.id as any)}
+                onClick={() => setFormat(f.id as ExportConfig["format"])}
                 className={`flex flex-col items-center justify-center p-3 border rounded-lg cursor-pointer transition-all ${
                   format === f.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"
                 }`}

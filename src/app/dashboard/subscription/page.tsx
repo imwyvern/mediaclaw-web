@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, CreditCard, Download, Zap, BarChart3, Clock, AlertCircle } from "lucide-react";
+import { Check, Download, Zap, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 const PLANS = [
   {
@@ -50,6 +51,7 @@ export default function SubscriptionPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      <MetadataUpdater title="订阅管理" />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Subscription & Billing</h1>
         <p className="text-muted-foreground">Manage your plan, usage, and billing history.</p>

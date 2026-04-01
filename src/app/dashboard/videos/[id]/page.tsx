@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { VideoPlayer } from "@/components/video-player";
 import { MetadataUpdater } from "@/components/metadata-updater";
-import { api, apiClient } from "@/lib/api";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function VideoDetailPage() {

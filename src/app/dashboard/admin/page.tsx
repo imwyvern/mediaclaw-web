@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,10 +11,12 @@ import { Switch } from "@/components/ui/switch";
 import { Activity, ShieldAlert, Users, Server, Settings2, CheckCircle2, AlertCircle, Database, ListChecks } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/empty-state";
+import { MetadataUpdater } from "@/components/metadata-updater";
 
 export default function AdminPage() {
   return (
     <div className="flex flex-col gap-8">
+      <MetadataUpdater title="管理后台" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Panel</h1>

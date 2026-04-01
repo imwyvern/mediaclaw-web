@@ -3,11 +3,9 @@
 import { useState, useEffect } from "react";
 import { 
   Search, 
-  Video, 
   Film, 
   Briefcase, 
   Target, 
-  Command,
   ArrowRight,
   History
 } from "lucide-react";
@@ -124,7 +122,7 @@ export function GlobalSearch() {
               </div>
             ) : (
               <div className="p-12 text-center text-muted-foreground">
-                <p>未找到与 "{query}" 相关的结果</p>
+                <p>未找到与 &quot;{query}&quot; 相关的结果</p>
               </div>
             )}
           </ScrollArea>
