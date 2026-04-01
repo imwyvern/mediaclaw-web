@@ -188,7 +188,7 @@ export default function AuthPage() {
     <div className="relative flex min-h-screen w-full bg-background lg:overflow-hidden">
       <MetadataUpdater title="登录 / 注册" description="登录您的 MediaClaw 账号，开启自动化视频生产。" />
 
-      <div className="relative flex w-full flex-col items-center overflow-y-auto py-12 lg:w-[60%] lg:justify-center lg:py-10">
+      <div className="relative flex w-full flex-col items-center overflow-y-auto py-12 lg:w-[55%] lg:justify-center lg:py-10 xl:w-[60%]">
         <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-56 bg-gradient-to-b from-primary/[0.08] to-transparent lg:block" />
         <div className="pointer-events-none absolute left-[-12%] top-24 hidden h-72 w-72 rounded-full bg-primary/[0.08] blur-3xl lg:block" />
 
@@ -201,7 +201,7 @@ export default function AuthPage() {
           </div>
 
           <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-4 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-6">
-            <Tabs value={mode} className="w-full" onValueChange={(value) => setMode(value as "login" | "register")}>
+            <Tabs value={mode} className="w-full flex-col" onValueChange={(value) => setMode(value as "login" | "register")}>
               <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
                 <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
                   个人登录
@@ -250,13 +250,13 @@ export default function AuthPage() {
                     <Label htmlFor="code" className="text-sm font-medium">
                       验证码
                     </Label>
-                    <div className="flex gap-3">
+                    <div className="space-y-3">
                       <Input
                         id="code"
                         type="text"
                         placeholder="6位数字验证码"
                         aria-invalid={code.length > 0 && code.length < 6}
-                        className="h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
+                        className="h-11 w-full rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
                         maxLength={6}
                         value={code}
                         onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
@@ -265,7 +265,7 @@ export default function AuthPage() {
                       <Button
                         type="button"
                         variant="secondary"
-                        className="h-11 min-w-[148px] rounded-xl"
+                        className="h-11 w-full rounded-xl"
                         disabled={isLoginSendingCode || timer > 0}
                         onClick={() => void handleSendCode()}
                       >
@@ -411,12 +411,12 @@ export default function AuthPage() {
                       <Label htmlFor="registerCode" className={`text-sm font-medium ${registerErrors.code ? "text-destructive" : ""}`}>
                         验证码 <span className="text-destructive">*</span>
                       </Label>
-                      <div className="flex gap-3">
+                      <div className="space-y-3">
                         <Input
                           id="registerCode"
                           placeholder="6位数字验证码"
                           aria-invalid={Boolean(registerErrors.code)}
-                          className={`h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
+                          className={`h-11 w-full rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
                           maxLength={6}
                           value={registerForm.code}
                           onChange={(event) => updateRegisterForm("code", event.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -424,7 +424,7 @@ export default function AuthPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          className="h-11 min-w-[148px] rounded-xl"
+                          className="h-11 w-full rounded-xl"
                           disabled={isRegisterSendingCode || registerTimer > 0}
                           onClick={() => void handleRegisterSendCode()}
                         >
@@ -492,7 +492,7 @@ export default function AuthPage() {
         </div>
       </div>
 
-      <div className="relative hidden overflow-hidden bg-zinc-950 p-12 text-zinc-50 lg:flex lg:w-[40%] lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-zinc-950 p-12 text-zinc-50 lg:flex lg:w-[45%] lg:flex-col lg:justify-between xl:w-[40%]">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-blue-600/20 opacity-30 mix-blend-overlay" />
         <div className="absolute right-0 top-0 h-[600px] w-[600px] translate-x-1/3 -translate-y-1/4 rounded-full bg-primary/20 blur-[120px]" />
         <div className="absolute bottom-0 left-0 h-[600px] w-[600px] -translate-x-1/3 translate-y-1/3 rounded-full bg-blue-600/20 blur-[120px]" />
