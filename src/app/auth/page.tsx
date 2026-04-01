@@ -200,7 +200,7 @@ export default function AuthPage() {
             MediaClaw
           </div>
 
-          <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-8">
+          <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-4 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-6">
             <Tabs value={mode} className="w-full" onValueChange={(value) => setMode(value as "login" | "register")}>
               <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
                 <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
@@ -250,13 +250,13 @@ export default function AuthPage() {
                     <Label htmlFor="code" className="text-sm font-medium">
                       验证码
                     </Label>
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="flex gap-3">
                       <Input
                         id="code"
                         type="text"
                         placeholder="6位数字验证码"
                         aria-invalid={code.length > 0 && code.length < 6}
-                        className="h-11 flex-1 rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
+                        className="h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
                         maxLength={6}
                         value={code}
                         onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
@@ -316,7 +316,7 @@ export default function AuthPage() {
                 </div>
 
                 <form className="space-y-6" onSubmit={handleRegister}>
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.18] p-4">
+                  <section className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.18] p-3">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Building2 className="h-4 w-4" />
@@ -367,7 +367,7 @@ export default function AuthPage() {
                     </div>
                   </section>
 
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-background p-4 shadow-sm">
+                  <section className="space-y-3 rounded-xl border border-border/60 bg-background p-3 shadow-sm">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <ShieldCheck className="h-4 w-4" />
@@ -411,12 +411,12 @@ export default function AuthPage() {
                       <Label htmlFor="registerCode" className={`text-sm font-medium ${registerErrors.code ? "text-destructive" : ""}`}>
                         验证码 <span className="text-destructive">*</span>
                       </Label>
-                      <div className="flex flex-col gap-3 sm:flex-row">
+                      <div className="flex gap-3">
                         <Input
                           id="registerCode"
                           placeholder="6位数字验证码"
                           aria-invalid={Boolean(registerErrors.code)}
-                          className={`h-11 flex-1 rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
+                          className={`h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
                           maxLength={6}
                           value={registerForm.code}
                           onChange={(event) => updateRegisterForm("code", event.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -445,7 +445,7 @@ export default function AuthPage() {
                     </div>
                   </section>
 
-                  <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.16] p-4">
+                  <section className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.16] p-3">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Mail className="h-4 w-4" />
