@@ -1,19 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { type ReactElement, useState } from "react";
+import { Code, Download, FileText, Loader2, Table as TableIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Download, Loader2, FileText, Table as TableIcon, Code } from "lucide-react";
-import { toast } from "sonner";
 
 interface ExportDialogProps {
   title: string;
   description: string;
   onExport: (config: ExportConfig) => Promise<void>;
-  trigger?: React.ReactNode;
+  trigger?: ReactElement;
 }
 
 export interface ExportConfig {
@@ -32,7 +40,7 @@ const AVAILABLE_FIELDS = [
   { id: "url", label: "Download URL" },
 ];
 
-export function ExportDialog({ title, description, onExport }: ExportDialogProps) {
+export function ExportDialog({ title, description, onExport, trigger }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ExportConfig["format"]>("csv");
   const [dateRange, setDateRange] = useState("30d");
@@ -40,23 +48,26 @@ export function ExportDialog({ title, description, onExport }: ExportDialogProps
   const [loading, setLoading] = useState(false);
 
   const toggleField = (fieldId: string) => {
-    setSelectedFields(prev => 
-      prev.includes(fieldId) ? prev.filter(f => f !== fieldId) : [...prev, fieldId]
-    );
+    setSelectedFields((previous) => (
+      previous.includes(fieldId)
+        ? previous.filter((field) => field !== fieldId)
+        : [...previous, fieldId]
+    ));
   };
 
   const handleExport = async () => {
     if (selectedFields.length === 0) {
-      toast.error("Please select at least one field to export.");
+      toast.error("请至少选择一个导出字段");
       return;
     }
+
     setLoading(true);
     try {
       await onExport({ format, dateRange, fields: selectedFields });
-      toast.success("Export started. Your file will be ready shortly.");
+      toast.success("导出任务已开始，文件准备好后会自动下载或提示。");
       setOpen(false);
     } catch {
-      toast.error("Export failed. Please try again.");
+      toast.error("导出失败，请稍后重试。");
     } finally {
       setLoading(false);
     }
@@ -64,61 +75,68 @@ export function ExportDialog({ title, description, onExport }: ExportDialogProps
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-        <Download className="w-4 h-4 mr-2" /> Export
-      </DialogTrigger>
+      <DialogTrigger
+        render={trigger || (
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            导出
+          </Button>
+        )}
+      />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-6 py-4">
           <div className="grid grid-cols-3 gap-2">
             {[
               { id: "csv", label: "CSV", icon: FileText },
               { id: "xlsx", label: "Excel", icon: TableIcon },
               { id: "json", label: "JSON", icon: Code },
-            ].map((f) => (
-              <div 
-                key={f.id}
-                onClick={() => setFormat(f.id as ExportConfig["format"])}
-                className={`flex flex-col items-center justify-center p-3 border rounded-lg cursor-pointer transition-all ${
-                  format === f.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"
+            ].map((option) => (
+              <div
+                key={option.id}
+                onClick={() => setFormat(option.id as ExportConfig["format"])}
+                className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border p-3 transition-all ${
+                  format === option.id
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "hover:bg-muted"
                 }`}
               >
-                <f.icon className={`w-5 h-5 mb-1 ${format === f.id ? "text-primary" : "text-muted-foreground"}`} />
-                <span className="text-xs font-medium">{f.label}</span>
+                <option.icon className={`mb-1 h-5 w-5 ${format === option.id ? "text-primary" : "text-muted-foreground"}`} />
+                <span className="text-xs font-medium">{option.label}</span>
               </div>
             ))}
           </div>
 
           <div className="space-y-2">
-            <Label>Date Range</Label>
-            <Select value={dateRange} onValueChange={(v) => v && setDateRange(v)}>
+            <Label>时间范围</Label>
+            <Select value={dateRange} onValueChange={(value) => value && setDateRange(value)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
-                <SelectItem value="90d">Last 90 Days</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="7d">最近 7 天</SelectItem>
+                <SelectItem value="30d">最近 30 天</SelectItem>
+                <SelectItem value="90d">最近 90 天</SelectItem>
+                <SelectItem value="all">全部时间</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-3">
-            <Label>Fields to include</Label>
+            <Label>导出字段</Label>
             <div className="grid grid-cols-2 gap-3">
               {AVAILABLE_FIELDS.map((field) => (
                 <div key={field.id} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`field-${field.id}`} 
+                  <Checkbox
+                    id={`field-${field.id}`}
                     checked={selectedFields.includes(field.id)}
                     onCheckedChange={() => toggleField(field.id)}
                   />
-                  <label htmlFor={`field-${field.id}`} className="text-sm font-medium leading-none cursor-pointer">
+                  <label htmlFor={`field-${field.id}`} className="cursor-pointer text-sm font-medium leading-none">
                     {field.label}
                   </label>
                 </div>
@@ -128,10 +146,12 @@ export function ExportDialog({ title, description, onExport }: ExportDialogProps
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={loading}>
+            取消
+          </Button>
           <Button onClick={handleExport} disabled={loading} className="px-8">
-            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-            Export
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            导出
           </Button>
         </DialogFooter>
       </DialogContent>
