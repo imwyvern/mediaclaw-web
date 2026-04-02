@@ -4,35 +4,43 @@ import { wsManager } from "@/lib/ws";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { 
-  Video, 
-  LayoutDashboard, 
-  Film, 
-  Flame,
-  Briefcase, 
-  BarChart, 
-  CreditCard, 
-  Settings,
-  Menu,
-  LogOut,
-  Target,
+import {
+  Activity,
+  BarChart,
+  Briefcase,
   Calendar,
-  Shield,
   ChevronRight,
+  CreditCard,
+  Film,
+  Flame,
   Home,
-  Plus,
+  Layers,
+  LayoutDashboard,
   ListTodo,
-  Layers
+  LogOut,
+  Menu,
+  Plus,
+  Settings,
+  Shield,
+  Target,
+  Video,
 } from "lucide-react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Breadcrumb,
@@ -46,8 +54,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { NotificationCenter } from "@/components/notification-center";
 import { GlobalSearch } from "@/components/global-search";
-import { useAuthStore } from "@/lib/store";
 import { eraseCookie } from "@/lib/cookies";
+import { api, type AccountSnapshot, type User } from "@/lib/api";
+import { formatCompactNumber } from "@/lib/format";
+import { useAuthStore } from "@/lib/store";
 
 const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -58,18 +68,63 @@ const navItems = [
   { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
   { name: "Brands", href: "/dashboard/brands", icon: Briefcase },
   { name: "Campaigns", href: "/dashboard/campaigns", icon: Target },
+  { name: "Usage", href: "/dashboard/usage", icon: Activity },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
   { name: "Admin", href: "/dashboard/admin", icon: Shield },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+] as const;
 
-function SidebarContent({ pathname, onItemClick }: { pathname: string; onItemClick?: () => void }) {
+const routeNameMap: Record<string, string> = {
+  dashboard: "Overview",
+  content: "Content",
+  videos: "Videos",
+  discovery: "爆款发现",
+  tasks: "Tasks",
+  calendar: "Calendar",
+  brands: "Brands",
+  campaigns: "Campaigns",
+  usage: "Usage",
+  analytics: "Analytics",
+  billing: "Billing",
+  admin: "Admin",
+  settings: "Settings",
+  onboarding: "Onboarding",
+  subscription: "Subscription",
+  create: "Create",
+};
+
+function getInitials(name?: string) {
+  if (!name) {
+    return "MC";
+  }
+
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "MC";
+}
+
+function SidebarContent({
+  pathname,
+  remainingCredits,
+  totalCredits,
+  usagePercent,
+  onItemClick,
+}: {
+  pathname: string;
+  remainingCredits: number;
+  totalCredits: number;
+  usagePercent: number;
+  onItemClick?: () => void;
+}) {
   return (
-    <div className="flex flex-col h-full bg-background border-r">
+    <div className="flex h-full flex-col border-r bg-background">
       <div className="p-6">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground">
+        <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Video size={18} />
           </div>
           MediaClaw
@@ -80,14 +135,20 @@ function SidebarContent({ pathname, onItemClick }: { pathname: string; onItemCli
           {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             const Icon = item.icon;
+
             return (
               <Link key={item.name} href={item.href} onClick={onItemClick}>
-                <span className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium group ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}>
-                  <Icon size={18} className={isActive ? "text-primary-foreground" : "group-hover:scale-110 transition-transform"} />
+                <span
+                  className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon
+                    size={18}
+                    className={isActive ? "text-primary-foreground" : "transition-transform group-hover:scale-110"}
+                  />
                   {item.name}
                 </span>
               </Link>
@@ -95,15 +156,24 @@ function SidebarContent({ pathname, onItemClick }: { pathname: string; onItemCli
           })}
         </nav>
       </ScrollArea>
-      <div className="p-4 border-t mt-auto">
-        <div className="bg-muted/50 rounded-xl p-4 border border-dashed border-muted-foreground/20">
-          <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Usage</div>
-          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mb-2">
-            <div className="bg-primary h-full w-[45%] rounded-full" />
+      <div className="mt-auto border-t p-4">
+        <div className="rounded-xl border border-dashed border-muted-foreground/20 bg-muted/50 p-4">
+          <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <span>Usage</span>
+            <Link href="/dashboard/usage" className="text-primary hover:underline">
+              查看
+            </Link>
           </div>
-          <div className="flex justify-between text-[10px] font-medium uppercase tracking-tight">
-            <span>45 / 100 Credits</span>
-            <Link href="/dashboard/billing" className="text-primary hover:underline">Upgrade</Link>
+          <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${usagePercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-tight">
+            <span>
+              {formatCompactNumber(remainingCredits)} / {formatCompactNumber(totalCredits)} Credits
+            </span>
+            <Link href="/dashboard/billing" className="text-primary hover:underline">
+              Upgrade
+            </Link>
           </div>
         </div>
       </div>
@@ -115,6 +185,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [accountInfo, setAccountInfo] = useState<User | null>(null);
+  const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
   const handleLogout = () => {
@@ -129,42 +202,91 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => wsManager.disconnect();
   }, []);
 
-  const getBreadcrumbs = () => {
-    const paths = pathname.split("/").filter(Boolean);
-    return paths.map((path, i) => {
-      const href = `/${paths.slice(0, i + 1).join("/")}`;
-      const name = path.charAt(0).toUpperCase() + path.slice(1);
-      return { name, href, isLast: i === paths.length - 1 };
-    });
-  };
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateLayoutMeta = async () => {
+      try {
+        const [infoResponse, accountResponse] = await Promise.all([
+          api.account.info().catch(() => null),
+          api.account.get().catch(() => null),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (infoResponse?.data) {
+          setAccountInfo(infoResponse.data);
+        }
+        if (accountResponse?.data) {
+          setAccountSnapshot(accountResponse.data);
+        }
+      } catch {
+        if (!cancelled) {
+          setAccountInfo(user || null);
+        }
+      }
+    };
+
+    void hydrateLayoutMeta();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const currentUser = accountInfo || user;
+  const remainingCredits = accountSnapshot?.credits.remaining ?? 0;
+  const totalCredits = accountSnapshot?.credits.total ?? 0;
+  const usedCredits = accountSnapshot?.credits.used ?? Math.max(totalCredits - remainingCredits, 0);
+  const usagePercent = totalCredits > 0 ? Math.min(100, (usedCredits / totalCredits) * 100) : 0;
+
+  const breadcrumbs = pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment, index, segments) => ({
+      name: routeNameMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1),
+      href: `/${segments.slice(0, index + 1).join("/")}`,
+      isLast: index === segments.length - 1,
+    }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:block w-64 flex-shrink-0">
-        <SidebarContent pathname={pathname} />
+      <aside className="hidden w-64 flex-shrink-0 md:block">
+        <SidebarContent
+          pathname={pathname}
+          remainingCredits={remainingCredits}
+          totalCredits={totalCredits}
+          usagePercent={usagePercent}
+        />
       </aside>
 
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b bg-background/80 backdrop-blur z-30 sticky top-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur sm:px-6">
           <div className="flex items-center gap-4">
             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-              <SheetTrigger className="md:hidden inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 text-muted-foreground">
-                <Menu className="w-5 h-5" />
+              <SheetTrigger className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground md:hidden">
+                <Menu className="h-5 w-5" />
               </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-72">
+              <SheetContent side="left" className="w-72 p-0">
                 <SheetHeader className="sr-only">
                   <SheetTitle>Navigation Menu</SheetTitle>
                 </SheetHeader>
-                <SidebarContent pathname={pathname} onItemClick={() => setIsMobileOpen(false)} />
+                <SidebarContent
+                  pathname={pathname}
+                  remainingCredits={remainingCredits}
+                  totalCredits={totalCredits}
+                  usagePercent={usagePercent}
+                  onItemClick={() => setIsMobileOpen(false)}
+                />
               </SheetContent>
             </Sheet>
-            
-            <div className="hidden md:block w-full max-w-[240px]">
+
+            <div className="hidden w-full max-w-[240px] md:block">
               <GlobalSearch />
             </div>
-            
+
             <div className="hidden sm:block">
               <Breadcrumb>
                 <BreadcrumbList>
@@ -173,7 +295,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <Home size={14} />
                     </BreadcrumbLink>
                   </BreadcrumbItem>
-                  {getBreadcrumbs().slice(1).map((crumb) => (
+                  {breadcrumbs.slice(1).map((crumb) => (
                     <div key={crumb.href} className="flex items-center gap-2">
                       <BreadcrumbSeparator>
                         <ChevronRight size={14} />
@@ -194,23 +316,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="flex items-center gap-2 sm:gap-4">
             <NotificationCenter />
-            
+
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 outline-none group">
-                <Avatar className="h-9 w-9 border-2 border-transparent group-hover:border-primary/20 transition-all">
-                  <AvatarImage src="https://github.com/shadcn.png" />
-                  <AvatarFallback>MC</AvatarFallback>
+              <DropdownMenuTrigger className="group flex items-center gap-2 outline-none">
+                <Avatar className="h-9 w-9 border-2 border-transparent transition-all group-hover:border-primary/20">
+                  <AvatarImage src={currentUser?.avatarUrl || undefined} />
+                  <AvatarFallback>{getInitials(currentUser?.name)}</AvatarFallback>
                 </Avatar>
-                <div className="hidden lg:flex flex-col items-start text-left">
-                  <span className="text-sm font-bold leading-none">Admin User</span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Enterprise</span>
+                <div className="hidden items-start text-left lg:flex">
+                  <span className="text-sm font-bold leading-none">
+                    {currentUser?.name || "MediaClaw User"}
+                  </span>
+                  <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {currentUser?.role === "admin" ? "管理员" : "成员"}
+                  </span>
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuLabel>我的账户</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
-                  <Link href="/dashboard/settings" className="cursor-pointer flex w-full items-center">
+                  <Link href="/dashboard/settings" className="flex w-full cursor-pointer items-center">
                     <Settings className="mr-2 h-4 w-4" /> Account Settings
                   </Link>
                 </DropdownMenuItem>
@@ -218,8 +344,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <Briefcase className="mr-2 h-4 w-4" /> Switch Workspace
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  className="text-destructive focus:bg-destructive focus:text-destructive-foreground cursor-pointer"
+                <DropdownMenuItem
+                  className="cursor-pointer text-destructive focus:bg-destructive focus:text-destructive-foreground"
                   onClick={handleLogout}
                 >
                   <LogOut className="mr-2 h-4 w-4" /> Log out
@@ -229,17 +355,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {/* Main Content */}
         <main className="flex-1 overflow-auto bg-muted/5 pb-20 md:pb-0">
-          <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500">
-            <ErrorBoundary>
-              {children}
-            </ErrorBoundary>
+          <div className="mx-auto max-w-7xl animate-in fade-in p-4 duration-500 sm:p-6 lg:p-8">
+            <ErrorBoundary>{children}</ErrorBoundary>
           </div>
         </main>
 
-        {/* Mobile Bottom Tab Navigation */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t h-16 flex items-center justify-around px-2 z-40">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t bg-background px-2 md:hidden">
           {[
             { name: "Home", href: "/dashboard", icon: LayoutDashboard },
             { name: "Videos", href: "/dashboard/videos", icon: Film },
@@ -252,16 +374,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             if (item.primary) {
               return (
                 <Link key={item.name} href={item.href} className="relative -top-6">
-                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/30 ring-4 ring-background">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 ring-4 ring-background">
                     <Icon size={24} />
                   </div>
                 </Link>
               );
             }
+
             return (
-              <Link key={item.name} href={item.href} className={`flex flex-col items-center gap-1 flex-1 py-1 ${
-                isActive ? "text-primary" : "text-muted-foreground"
-              }`}>
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex flex-1 flex-col items-center gap-1 py-1 ${
+                  isActive ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
                 <Icon size={20} />
                 <span className="text-[10px] font-medium">{item.name}</span>
               </Link>
