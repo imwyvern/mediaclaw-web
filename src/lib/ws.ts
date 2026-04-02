@@ -14,6 +14,7 @@ export interface NotificationData {
 export interface VideoEventData {
   id: string;
   title: string;
+  outputVideoUrl?: string;
 }
 
 export type WSEventData = {
