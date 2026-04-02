@@ -250,13 +250,13 @@ export default function AuthPage() {
                     <Label htmlFor="code" className="text-sm font-medium">
                       验证码
                     </Label>
-                    <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Input
                         id="code"
                         type="text"
                         placeholder="6位数字验证码"
                         aria-invalid={code.length > 0 && code.length < 6}
-                        className="h-11 w-full rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
+                        className="h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] focus-visible:ring-1 focus-visible:ring-primary"
                         maxLength={6}
                         value={code}
                         onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
@@ -265,14 +265,14 @@ export default function AuthPage() {
                       <Button
                         type="button"
                         variant="secondary"
-                        className="h-11 w-full rounded-xl"
+                        className="h-11 shrink-0 rounded-xl px-5"
                         disabled={isLoginSendingCode || timer > 0}
                         onClick={() => void handleSendCode()}
                       >
                         {isLoginSendingCode ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : timer > 0 ? (
-                          `${timer}s 后重试`
+                          `${timer}s`
                         ) : (
                           "获取验证码"
                         )}
@@ -411,12 +411,12 @@ export default function AuthPage() {
                       <Label htmlFor="registerCode" className={`text-sm font-medium ${registerErrors.code ? "text-destructive" : ""}`}>
                         验证码 <span className="text-destructive">*</span>
                       </Label>
-                      <div className="space-y-3">
+                      <div className="flex gap-3">
                         <Input
                           id="registerCode"
                           placeholder="6位数字验证码"
                           aria-invalid={Boolean(registerErrors.code)}
-                          className={`h-11 w-full rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
+                          className={`h-11 min-w-0 flex-1 rounded-xl font-mono tracking-[0.3em] ${registerErrors.code ? "border-destructive focus-visible:ring-destructive" : "focus-visible:ring-1 focus-visible:ring-primary"}`}
                           maxLength={6}
                           value={registerForm.code}
                           onChange={(event) => updateRegisterForm("code", event.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -424,14 +424,14 @@ export default function AuthPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          className="h-11 w-full rounded-xl"
+                          className="h-11 shrink-0 rounded-xl px-5"
                           disabled={isRegisterSendingCode || registerTimer > 0}
                           onClick={() => void handleRegisterSendCode()}
                         >
                           {isRegisterSendingCode ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : registerTimer > 0 ? (
-                            `${registerTimer}s 后重试`
+                            `${registerTimer}s`
                           ) : (
                             "获取验证码"
                           )}
