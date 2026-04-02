@@ -127,6 +127,73 @@ export interface AuthResponse {
   isNewUser: boolean;
 }
 
+export type DiscoveryPlatform = "douyin" | "xhs" | "kuaishou" | "bilibili";
+
+export interface DiscoveryPoolParams {
+  limit?: number;
+  industry?: string;
+  platform?: DiscoveryPlatform | "all";
+  sortBy?: "viralScore" | "time";
+}
+
+export interface DiscoveryPoolItem {
+  contentId: string;
+  platform: DiscoveryPlatform;
+  videoId: string;
+  title: string;
+  author: string;
+  viralScore: number;
+  industry?: string;
+  keywords?: string[];
+  contentUrl?: string;
+  thumbnailUrl?: string;
+  discoveredAt?: string;
+  views?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+}
+
+export interface DiscoveryPoolResponse {
+  orgId: string;
+  total: number;
+  source: string;
+  items: DiscoveryPoolItem[];
+}
+
+export interface DiscoveryViralAnalysis {
+  source: string;
+  model: string;
+  contentId: string;
+  platform: DiscoveryPlatform;
+  videoId: string;
+  title: string;
+  summary: string;
+  hooks: string[];
+  narrativeBeats: string[];
+  visualMotifs: string[];
+  audioCues: string[];
+  ctaStyle?: string;
+  risks: string[];
+  raw?: string;
+}
+
+export interface DiscoveryRemixBrief {
+  source: string;
+  model: string;
+  contentId: string;
+  brandId: string;
+  briefTitle: string;
+  coreAngle?: string;
+  targetAudience?: string;
+  openingHook?: string;
+  scenePlan: string[];
+  copyIdeas: string[];
+  brandSafetyNotes: string[];
+  productionNotes: string[];
+  raw?: string;
+}
+
 type AnalyticsPeriod = "daily" | "weekly" | "monthly";
 
 function normalizeAnalyticsPeriod(timeframe?: string): AnalyticsPeriod | undefined {
@@ -189,6 +256,24 @@ export const api = {
     create: (data: any) => apiClient.post("/v1/campaign", data),
     update: (id: string, data: any) => apiClient.patch(`/v1/campaign/${id}`, data),
     remove: (id: string) => apiClient.delete(`/v1/campaign/${id}`),
+  },
+  discovery: {
+    getPool: (params?: DiscoveryPoolParams) => {
+      const query = {
+        limit: params?.limit,
+        industry: params?.industry,
+      };
+
+      return apiClient.get<DiscoveryPoolResponse>("/v1/discovery/pool", {
+        params: query,
+      });
+    },
+    analyzeViral: (contentId: string) =>
+      apiClient.post<DiscoveryViralAnalysis>("/v1/discovery/analyze-viral-elements", { contentId }),
+    generateBrief: (contentId: string, brandId: string) =>
+      apiClient.post<DiscoveryRemixBrief>("/v1/discovery/generate-remix-brief", { contentId, brandId }),
+    markRemixed: (contentId: string, taskId: string) =>
+      apiClient.post("/v1/discovery/mark-remixed", { contentId, taskId }),
   },
   account: {
     info: () => apiClient.get("/v1/account"),
