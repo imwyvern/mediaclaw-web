@@ -35,6 +35,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   api,
+  isApiNotFoundError,
   readApiErrorMessage,
   type AnalyticsOverview,
   type AnalyticsTopVideo,
@@ -59,6 +60,13 @@ interface SectionErrorState {
   trends: string | null;
   topVideos: string | null;
   benchmark: string | null;
+}
+
+interface SectionComingSoonState {
+  overview: boolean;
+  trends: boolean;
+  topVideos: boolean;
+  benchmark: boolean;
 }
 
 interface TrendMetricConfig {
@@ -154,6 +162,13 @@ const EMPTY_ERRORS: SectionErrorState = {
   trends: null,
   topVideos: null,
   benchmark: null,
+};
+
+const EMPTY_COMING_SOON: SectionComingSoonState = {
+  overview: false,
+  trends: false,
+  topVideos: false,
+  benchmark: false,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -447,6 +462,7 @@ export default function AnalyticsPage() {
   const [topVideos, setTopVideos] = useState<AnalyticsTopVideo[]>([]);
   const [benchmark, setBenchmark] = useState<BenchmarkPayload>(null);
   const [errors, setErrors] = useState<SectionErrorState>(EMPTY_ERRORS);
+  const [comingSoonState, setComingSoonState] = useState<SectionComingSoonState>(EMPTY_COMING_SOON);
 
   const requestIdRef = useRef(0);
 
@@ -463,6 +479,7 @@ export default function AnalyticsPage() {
     }
 
     setErrors(EMPTY_ERRORS);
+    setComingSoonState(EMPTY_COMING_SOON);
 
     try {
       const [overviewResult, trendsResult, topResult, benchmarkResult] = await Promise.allSettled([
@@ -477,10 +494,14 @@ export default function AnalyticsPage() {
       }
 
       const nextErrors: SectionErrorState = { ...EMPTY_ERRORS };
+      const nextComingSoon: SectionComingSoonState = { ...EMPTY_COMING_SOON };
       const failedMessages: string[] = [];
 
       if (overviewResult.status === "fulfilled") {
         setOverview(overviewResult.value.data);
+      } else if (isApiNotFoundError(overviewResult.reason)) {
+        setOverview(null);
+        nextComingSoon.overview = true;
       } else {
         const message = readApiErrorMessage(overviewResult.reason, "概览数据加载失败，请稍后重试。");
         setOverview(null);
@@ -490,6 +511,9 @@ export default function AnalyticsPage() {
 
       if (trendsResult.status === "fulfilled") {
         setTrends(trendsResult.value.data);
+      } else if (isApiNotFoundError(trendsResult.reason)) {
+        setTrends([]);
+        nextComingSoon.trends = true;
       } else {
         const message = readApiErrorMessage(trendsResult.reason, "趋势数据加载失败，请稍后重试。");
         setTrends([]);
@@ -499,6 +523,9 @@ export default function AnalyticsPage() {
 
       if (topResult.status === "fulfilled") {
         setTopVideos(topResult.value.data);
+      } else if (isApiNotFoundError(topResult.reason)) {
+        setTopVideos([]);
+        nextComingSoon.topVideos = true;
       } else {
         const message = readApiErrorMessage(topResult.reason, "Top 视频加载失败，请稍后重试。");
         setTopVideos([]);
@@ -516,6 +543,7 @@ export default function AnalyticsPage() {
       }
 
       setErrors(nextErrors);
+      setComingSoonState(nextComingSoon);
 
       if (failedMessages.length > 0) {
         toast.error(failedMessages.length >= 3 ? "数据分析加载失败" : "部分分析数据更新失败", {
@@ -538,6 +566,7 @@ export default function AnalyticsPage() {
         topVideos: message,
         benchmark: message,
       });
+      setComingSoonState(EMPTY_COMING_SOON);
       toast.error("数据分析加载失败", { description: message });
     } finally {
       if (requestId === requestIdRef.current) {
@@ -547,9 +576,10 @@ export default function AnalyticsPage() {
     }
   };
 
+  // loadAnalytics also powers manual refresh/retry actions, so keep the effect keyed by timeframe only.
   useEffect(() => {
     void loadAnalytics(timeframe);
-  }, [timeframe]);
+  }, [timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const benchmarkSections = buildBenchmarkSections(benchmark);
   const hasBenchmarkData = benchmarkSections.length > 0;
@@ -565,7 +595,8 @@ export default function AnalyticsPage() {
       ),
   );
   const hasAnyAnalytics = hasOverviewData || trends.length > 0 || topVideos.length > 0 || hasBenchmarkData;
-  const pageError = !hasAnyAnalytics
+  const pageComingSoon = !hasAnyAnalytics && (comingSoonState.overview || comingSoonState.trends || comingSoonState.topVideos);
+  const pageError = !hasAnyAnalytics && !pageComingSoon
     ? errors.overview || errors.trends || errors.topVideos || errors.benchmark
     : null;
   const activeMetric = TREND_METRICS.find((item) => item.key === trendMetric) || TREND_METRICS[0];
@@ -697,36 +728,56 @@ export default function AnalyticsPage() {
       <DataState
         loading={loading}
         error={pageError}
-        isEmpty={!loading && !pageError && !hasAnyAnalytics}
+        isEmpty={!loading && !pageError && !pageComingSoon && !hasAnyAnalytics}
         onRetry={() => {
           void loadAnalytics(timeframe);
         }}
         loadingState={<AnalyticsPageSkeleton />}
         emptyState={
-          <WarmEmptyState
-            icon={Sparkles}
-            title="分析数据还在积累中"
-            description="当第一批真实视频产生出片、消耗和表现记录后，这里会自动生成趋势图与排行榜。"
-            actionLabel="去创建视频"
-            onAction={() => {
-              window.location.assign("/dashboard/videos/create");
-            }}
-          />
+          pageComingSoon ? (
+            <WarmEmptyState
+              icon={Sparkles}
+              title="数据分析即将上线"
+              description="当前环境尚未开放 analytics 核心接口，后端准备好后这里会自动展示真实概览、趋势和榜单。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadAnalytics(timeframe);
+              }}
+            />
+          ) : (
+            <WarmEmptyState
+              icon={Sparkles}
+              title="分析数据还在积累中"
+              description="当第一批真实视频产生出片、消耗和表现记录后，这里会自动生成趋势图与排行榜。"
+              actionLabel="去创建视频"
+              onAction={() => {
+                window.location.assign("/dashboard/videos/create");
+              }}
+            />
+          )
         }
       >
         <DataState
           loading={false}
-          error={errors.overview}
-          isEmpty={!errors.overview && !hasOverviewData}
+          error={comingSoonState.overview ? null : errors.overview}
+          isEmpty={!errors.overview && !comingSoonState.overview && !hasOverviewData}
           onRetry={() => {
             void loadAnalytics(timeframe);
           }}
           emptyState={
-            <WarmEmptyState
-              icon={Activity}
-              title="概览数据还没开始回传"
-              description="当真实任务进入生产与消费链路后，这里会展示额度、成功率与平均生产时长。"
-            />
+            comingSoonState.overview ? (
+              <WarmEmptyState
+                icon={Activity}
+                title="概览面板即将上线"
+                description="当前环境未开放 analytics/overview，后端接入后这里会自动展示真实概览。"
+              />
+            ) : (
+              <WarmEmptyState
+                icon={Activity}
+                title="概览数据还没开始回传"
+                description="当真实任务进入生产与消费链路后，这里会展示额度、成功率与平均生产时长。"
+              />
+            )
           }
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -802,17 +853,25 @@ export default function AnalyticsPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
           <DataState
             loading={false}
-            error={errors.trends}
-            isEmpty={!errors.trends && chartData.length === 0}
+            error={comingSoonState.trends ? null : errors.trends}
+            isEmpty={!errors.trends && !comingSoonState.trends && chartData.length === 0}
             onRetry={() => {
               void loadAnalytics(timeframe);
             }}
             emptyState={
-              <WarmEmptyState
-                icon={TrendingUp}
-                title="趋势数据还在积累中"
-                description="当前时间范围内还没有足够的真实分析样本，后续会自动绘制走势。"
-              />
+              comingSoonState.trends ? (
+                <WarmEmptyState
+                  icon={TrendingUp}
+                  title="趋势分析即将上线"
+                  description="当前环境未开放 analytics/trends，接入后这里会自动展示真实趋势曲线。"
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={TrendingUp}
+                  title="趋势数据还在积累中"
+                  description="当前时间范围内还没有足够的真实分析样本，后续会自动绘制走势。"
+                />
+              )
             }
           >
             <Card className="overflow-hidden border-white/10 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.16),transparent_30%),rgba(2,6,23,0.92)] shadow-[0_28px_90px_-56px_rgba(56,189,248,0.35)]">
@@ -955,21 +1014,29 @@ export default function AnalyticsPage() {
 
         <DataState
           loading={false}
-          error={errors.topVideos}
-          isEmpty={!errors.topVideos && topVideos.length === 0}
+          error={comingSoonState.topVideos ? null : errors.topVideos}
+          isEmpty={!errors.topVideos && !comingSoonState.topVideos && topVideos.length === 0}
           onRetry={() => {
             void loadAnalytics(timeframe);
           }}
           emptyState={
-            <WarmEmptyState
-              icon={Sparkles}
-              title="还没有 Top 视频榜单"
-              description="等第一批真实视频产生表现数据后，这里会自动按播放与互动排出最强内容。"
-              actionLabel="去视频库"
-              onAction={() => {
-                window.location.assign("/dashboard/videos");
-              }}
-            />
+            comingSoonState.topVideos ? (
+              <WarmEmptyState
+                icon={Sparkles}
+                title="Top 视频榜即将上线"
+                description="当前环境未开放 analytics/top，后端接入后这里会自动展示真实排行。"
+              />
+            ) : (
+              <WarmEmptyState
+                icon={Sparkles}
+                title="还没有 Top 视频榜单"
+                description="等第一批真实视频产生表现数据后，这里会自动按播放与互动排出最强内容。"
+                actionLabel="去视频库"
+                onAction={() => {
+                  window.location.assign("/dashboard/videos");
+                }}
+              />
+            )
           }
         >
           <Card className="border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] shadow-[0_28px_90px_-56px_rgba(245,158,11,0.22)]">
