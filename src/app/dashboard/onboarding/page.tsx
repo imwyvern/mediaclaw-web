@@ -41,6 +41,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   api,
+  isApiNotFoundError,
   readApiErrorMessage,
   type AccountPack,
   type AccountSnapshot,
@@ -361,6 +362,7 @@ export default function OnboardingPage() {
   const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountComingSoon, setAccountComingSoon] = useState(false);
 
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [brandSubmitting, setBrandSubmitting] = useState(false);
@@ -378,6 +380,7 @@ export default function OnboardingPage() {
     const loadInitialSnapshot = async () => {
       setAccountLoading(true);
       setAccountError(null);
+      setAccountComingSoon(false);
 
       try {
         const snapshot = await fetchAccountSnapshot();
@@ -386,7 +389,12 @@ export default function OnboardingPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          setAccountError(readApiErrorMessage(error, "账户额度加载失败，请稍后重试。"));
+          if (isApiNotFoundError(error)) {
+            setAccountSnapshot(null);
+            setAccountComingSoon(true);
+          } else {
+            setAccountError(readApiErrorMessage(error, "账户额度加载失败，请稍后重试。"));
+          }
         }
       } finally {
         if (!cancelled) {
@@ -405,6 +413,7 @@ export default function OnboardingPage() {
   const refreshAccountSnapshot = async (notifyOnSuccess = false) => {
     setAccountLoading(true);
     setAccountError(null);
+    setAccountComingSoon(false);
 
     try {
       const snapshot = await fetchAccountSnapshot();
@@ -413,7 +422,11 @@ export default function OnboardingPage() {
         toast.success("账户额度已刷新");
       }
     } catch (error) {
-      setAccountError(readApiErrorMessage(error, "账户额度加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setAccountComingSoon(true);
+      } else {
+        setAccountError(readApiErrorMessage(error, "账户额度加载失败，请稍后重试。"));
+      }
     } finally {
       setAccountLoading(false);
     }
@@ -441,7 +454,7 @@ export default function OnboardingPage() {
       toast.success("行业信息已保存");
       setStep(2);
     } catch (error) {
-      setProfileError(readApiErrorMessage(error, "行业保存失败，请稍后重试。"));
+      setProfileError(isApiNotFoundError(error) ? "行业配置接口即将上线，当前环境暂时无法保存。" : readApiErrorMessage(error, "行业保存失败，请稍后重试。"));
     } finally {
       setProfileSubmitting(false);
     }
@@ -479,7 +492,7 @@ export default function OnboardingPage() {
       setStep(3);
       void refreshAccountSnapshot();
     } catch (error) {
-      setBrandError(readApiErrorMessage(error, "品牌创建失败，请稍后重试。"));
+      setBrandError(isApiNotFoundError(error) ? "品牌初始化接口即将上线，当前环境暂时无法创建品牌。" : readApiErrorMessage(error, "品牌创建失败，请稍后重试。"));
     } finally {
       setBrandSubmitting(false);
     }
@@ -657,7 +670,18 @@ export default function OnboardingPage() {
           <CardContent className="space-y-6">
             {accountLoading && !accountSnapshot ? <AccountSkeleton /> : null}
 
-            {!accountLoading && !accountSnapshot && accountError ? (
+            {accountComingSoon && !accountSnapshot ? (
+              <EmptyState
+                icon={WalletCards}
+                title="试用额度即将上线"
+                description="当前环境尚未开放账户快照接口，后端发布后这里会直接展示真实试用包和余额。"
+                actionLabel="重新拉取"
+                onAction={() => {
+                  void refreshAccountSnapshot(true);
+                }}
+                className="border-white/10 bg-white/[0.04]"
+              />
+            ) : !accountLoading && !accountSnapshot && accountError ? (
               <ErrorState
                 title="额度加载失败"
                 description={accountError}
@@ -670,7 +694,11 @@ export default function OnboardingPage() {
 
             {accountSnapshot ? (
               <div className="space-y-5">
-                {accountError ? (
+                {accountComingSoon ? (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                    当前环境尚未开放账户快照接口，页面会在接口发布后自动切换为真实余额视图。
+                  </div>
+                ) : accountError ? (
                   <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
                     最新一次刷新失败，当前仍展示上一次成功拉取的账户数据。错误信息：{accountError}
                   </div>
@@ -745,7 +773,7 @@ export default function OnboardingPage() {
                 <ChevronLeft className="mr-2 h-4 w-4" />
                 返回
               </Button>
-              <Button size="lg" className="gap-2" onClick={() => setStep(4)} disabled={!accountSnapshot || accountLoading}>
+              <Button size="lg" className="gap-2" onClick={() => setStep(4)} disabled={accountLoading || (!accountSnapshot && !accountComingSoon)}>
                 <ChevronRight className="h-4 w-4" />
                 继续
               </Button>
@@ -881,7 +909,9 @@ export default function OnboardingPage() {
                       ? `可用余额 ${formatCompactNumber(accountSnapshot.credits.remaining)}，资源包 ${formatCompactNumber(accountSnapshot.packs.length)} 个。`
                       : accountLoading
                         ? "正在拉取账户快照。"
-                        : accountError || "等待拉取账户快照。"
+                        : accountComingSoon
+                          ? "账户快照接口即将上线。"
+                          : accountError || "等待拉取账户快照。"
                   }
                 />
                 <StepStatusItem
@@ -908,7 +938,11 @@ export default function OnboardingPage() {
                   </div>
                 ) : null}
 
-                {!accountLoading && !accountSnapshot && accountError ? (
+                {accountComingSoon && !accountSnapshot ? (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-4 text-sm leading-6 text-amber-50">
+                    账户快照接口即将上线，后端发布后这里会直接显示真实余额与资源包数量。
+                  </div>
+                ) : !accountLoading && !accountSnapshot && accountError ? (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm leading-6 text-red-100">
                     {accountError}
                   </div>
