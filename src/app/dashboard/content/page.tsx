@@ -12,6 +12,7 @@ import {
   Search,
   Send,
   ShieldAlert,
+  Sparkles,
   ShieldCheck,
   ShieldX,
 } from "lucide-react";
