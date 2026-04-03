@@ -22,7 +22,6 @@ import {
   readApiErrorMessage,
   type Brand,
   type DiscoveryPoolItem,
-  type DiscoveryPlatform,
   type DiscoveryViralAnalysis,
 } from "@/lib/api";
 
