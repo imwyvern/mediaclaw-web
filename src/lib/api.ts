@@ -1344,6 +1344,7 @@ function normalizePaginated<T>(
   }
 
   const record = objectValue(payload) || {};
+  const pagination = objectValue(record.pagination) || {};
   const rawItems = Array.isArray(record.items)
     ? record.items
     : Array.isArray(record.tasks)
@@ -1357,9 +1358,9 @@ function normalizePaginated<T>(
 
   return {
     items,
-    total: numberValue(record.total, items.length),
-    page: numberValue(record.page, 1),
-    limit: numberValue(record.limit, items.length || 10),
+    total: numberValue(record.total ?? pagination.total, items.length),
+    page: numberValue(record.page ?? pagination.page, 1),
+    limit: numberValue(record.limit ?? pagination.limit, items.length || 10),
   };
 }
 
@@ -2206,6 +2207,13 @@ const adminApi = {
 const billingApi = {
   balance: async () => accountApi.get(),
   orders: async (params?: Record<string, unknown>) => paymentApi.orders(params),
+  usageSummary: async (params?: Record<string, unknown>) => {
+    const raw = await requestData<unknown>({
+      url: "/v1/billing/usage-summary",
+      params,
+    });
+    return toResult(normalizeUsageSummary(raw));
+  },
   invoices: async (params?: Record<string, unknown>) => {
     const raw = await requestWithFallbackData<unknown>([
       { url: "/v1/billing/invoices", params },
