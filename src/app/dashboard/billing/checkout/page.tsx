@@ -4,12 +4,10 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   ExternalLink,
   Loader2,
-  QrCode,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -26,6 +24,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   api,
+  isApiNotFoundError,
   readApiErrorMessage,
   type PaginatedResponse,
   type PaymentOrder,
@@ -53,12 +52,14 @@ function CheckoutContent() {
 
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [productsComingSoon, setProductsComingSoon] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [ordersComingSoon, setOrdersComingSoon] = useState(false);
   const [products, setProducts] = useState<PaymentProduct[]>([]);
   const [orders, setOrders] = useState<PaginatedResponse<PaymentOrder> | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<"wechat_native" | "alipay">("wechat_native");
+  const paymentMethod = "wechat_native" as const;
   const [step, setStep] = useState<"select" | "pay" | "success" | "failed">("select");
   const [creating, setCreating] = useState(false);
   const [polling, setPolling] = useState(false);
@@ -68,13 +69,19 @@ function CheckoutContent() {
   const loadProducts = async () => {
     setProductsLoading(true);
     setProductsError(null);
+    setProductsComingSoon(false);
 
     try {
       const response = await api.payment.products();
       const nextProducts = sortPaymentProducts(response.data);
       setProducts(nextProducts);
     } catch (error) {
-      setProductsError(readApiErrorMessage(error, "支付商品加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setProducts([]);
+        setProductsComingSoon(true);
+      } else {
+        setProductsError(readApiErrorMessage(error, "支付商品加载失败，请稍后重试。"));
+      }
     } finally {
       setProductsLoading(false);
     }
@@ -83,20 +90,32 @@ function CheckoutContent() {
   const loadOrders = async () => {
     setOrdersLoading(true);
     setOrdersError(null);
+    setOrdersComingSoon(false);
 
     try {
       const response = await api.payment.orders({ page: 1, limit: ORDER_PAGE_SIZE });
       setOrders(response.data);
     } catch (error) {
-      setOrdersError(readApiErrorMessage(error, "最近订单加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
+        setOrdersComingSoon(true);
+      } else {
+        setOrdersError(readApiErrorMessage(error, "最近订单加载失败，请稍后重试。"));
+      }
     } finally {
       setOrdersLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadProducts();
-    void loadOrders();
+    const timer = window.setTimeout(() => {
+      void loadProducts();
+      void loadOrders();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -120,6 +139,24 @@ function CheckoutContent() {
 
   const productMap = new Map(products.map((product) => [product.id, product]));
   const selectedProduct = products.find((product) => product.id === selectedProductId) || null;
+  const bestValueProductId = products.reduce<string | null>((bestId, product) => {
+    if (product.unitCredits <= 0) {
+      return bestId;
+    }
+
+    if (!bestId) {
+      return product.id;
+    }
+
+    const bestProduct = products.find((item) => item.id === bestId);
+    if (!bestProduct || bestProduct.unitCredits <= 0) {
+      return product.id;
+    }
+
+    const currentUnitPrice = product.price / product.unitCredits;
+    const bestUnitPrice = bestProduct.price / bestProduct.unitCredits;
+    return currentUnitPrice < bestUnitPrice ? product.id : bestId;
+  }, null);
 
   const checkCurrentOrderStatus = async (options?: { silent?: boolean }) => {
     if (!currentOrder?.orderId) {
@@ -152,7 +189,8 @@ function CheckoutContent() {
         toast.message(`当前订单状态：${getPaymentStatusLabel(nextOrder.status)}`);
       }
     } catch (error) {
-      const message = readApiErrorMessage(error, "订单状态查询失败，请稍后重试。");
+      const message = isApiNotFoundError(error) ? "订单状态接口即将上线，请稍后回到 Billing 查看支付结果。" : readApiErrorMessage(error, "订单状态查询失败，请稍后重试。");
+      setPolling(false);
       setPaymentError(message);
       if (!options?.silent) {
         toast.error(message);
@@ -199,7 +237,9 @@ function CheckoutContent() {
         }
       } catch (error) {
         if (!cancelled) {
-          setPaymentError(readApiErrorMessage(error, "订单状态轮询失败，请稍后手动刷新。"));
+          const message = isApiNotFoundError(error) ? "订单状态接口即将上线，请稍后回到 Billing 查看支付结果。" : readApiErrorMessage(error, "订单状态轮询失败，请稍后手动刷新。");
+          setPolling(false);
+          setPaymentError(message);
         }
       }
     };
@@ -241,20 +281,25 @@ function CheckoutContent() {
 
       const nextOrder = response.data;
       setCurrentOrder(nextOrder);
-      setStep("pay");
 
-      if (nextOrder.payUrl) {
-        const popup = window.open(nextOrder.payUrl, "_blank", "noopener,noreferrer");
-        if (!popup) {
-          toast.warning("浏览器拦截了收银台弹窗，请点击页面中的“打开收银台”按钮继续支付。");
-        }
-      } else {
-        toast.error("未拿到收银台链接，请稍后重试。");
+      if (!nextOrder.payUrl) {
+        const message = "当前订单未返回收银台链接，请稍后重试或联系后端确认 xorpay 返回。";
+        setStep("select");
+        setPaymentError(message);
+        toast.error(message);
+        void loadOrders();
+        return;
+      }
+
+      setStep("pay");
+      const popup = window.open(nextOrder.payUrl, "_blank", "noopener,noreferrer");
+      if (!popup) {
+        toast.warning("浏览器拦截了收银台弹窗，请点击页面中的“打开收银台”按钮继续支付。");
       }
 
       void loadOrders();
     } catch (error) {
-      const message = readApiErrorMessage(error, "创建支付订单失败，请稍后重试。");
+      const message = isApiNotFoundError(error) ? "支付创建接口即将上线，当前环境暂时无法生成真实收银台链接。" : readApiErrorMessage(error, "创建支付订单失败，请稍后重试。");
       setPaymentError(message);
       toast.error(message);
     } finally {
@@ -320,21 +365,33 @@ function CheckoutContent() {
         <div className="space-y-6">
           <DataState
             loading={productsLoading}
-            error={productsError}
-            isEmpty={!productsLoading && products.length === 0}
+            error={productsComingSoon ? null : productsError}
+            isEmpty={!productsLoading && (productsComingSoon || products.length === 0)}
             onRetry={() => {
               void loadProducts();
             }}
             emptyState={
-              <WarmEmptyState
-                icon={Sparkles}
-                title="暂无可购买商品"
-                description="等支付商品配置完成后，这里会自动展示真实视频包。"
-                actionLabel="返回 Billing"
-                onAction={() => {
-                  window.location.href = "/dashboard/billing";
-                }}
-              />
+              productsComingSoon ? (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="支付方案即将上线"
+                  description="当前环境尚未开放支付商品接口，后端发布后这里会直接展示真实额度包与收银台入口。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadProducts();
+                  }}
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="暂无可购买商品"
+                  description="等支付商品配置完成后，这里会自动展示真实视频包。"
+                  actionLabel="返回 Billing"
+                  onAction={() => {
+                    window.location.href = "/dashboard/billing";
+                  }}
+                />
+              )
             }
           >
             {step === "select" ? (
@@ -347,9 +404,9 @@ function CheckoutContent() {
                 </CardHeader>
                 <CardContent>
                   <RadioGroup value={selectedProductId} onValueChange={setSelectedProductId} className="grid gap-4 sm:grid-cols-2">
-                    {products.map((product, index) => {
+                    {products.map((product) => {
                       const unitPrice = product.unitCredits > 0 ? product.price / product.unitCredits : product.price;
-                      const isRecommended = index === 1 || index === 2;
+                      const isRecommended = product.id === bestValueProductId;
 
                       return (
                         <div key={product.id}>
@@ -399,7 +456,7 @@ function CheckoutContent() {
                     <div>
                       <CardTitle className="text-white">完成支付</CardTitle>
                       <CardDescription className="text-slate-300/70">
-                        订单已创建，当前会持续轮询支付状态。你也可以手动重新打开收银台。
+                        订单已创建，页面会持续轮询真实支付状态。你也可以随时重新打开收银台。
                       </CardDescription>
                     </div>
                     <Badge variant="secondary" className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10">
@@ -407,82 +464,68 @@ function CheckoutContent() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-8 py-2">
-                  <div className="flex gap-3 rounded-xl bg-white/[0.04] p-1">
-                    <Button
-                      variant={paymentMethod === "wechat_native" ? "secondary" : "ghost"}
-                      className="flex-1 gap-2 text-white"
-                      onClick={() => setPaymentMethod("wechat_native")}
-                      disabled
-                    >
-                      微信支付
-                    </Button>
-                    <Button
-                      variant={paymentMethod === "alipay" ? "secondary" : "ghost"}
-                      className="flex-1 gap-2 text-white"
-                      onClick={() => setPaymentMethod("alipay")}
-                      disabled
-                    >
-                      支付宝
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-6">
-                    <div className="relative flex h-72 w-72 items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-white p-4 shadow-2xl">
-                      <QrCode className="h-56 w-56 text-slate-950" />
-                      {polling ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 text-slate-900 animate-in fade-in">
-                          <Loader2 className="mb-4 h-10 w-10 animate-spin text-sky-500" />
-                          <p className="text-sm font-black uppercase tracking-[0.28em] text-sky-600">Waiting for payment</p>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2 text-center">
-                      <p className="text-3xl font-black text-white">
-                        {selectedProduct ? formatCurrency(selectedProduct.price) : "--"}
-                      </p>
-                      <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                        订单号 {currentOrder?.orderId || "--"}
-                      </p>
-                      <p className="text-sm text-slate-300/70">
-                        收银台会在新标签页打开，支付完成后此页自动更新状态。
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap justify-center gap-3">
-                      <Button
-                        variant="outline"
-                        className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
-                        disabled={!currentOrder?.payUrl}
-                        onClick={() => {
-                          if (currentOrder?.payUrl) {
-                            window.open(currentOrder.payUrl, "_blank", "noopener,noreferrer");
-                          }
-                        }}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        打开收银台
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
-                        disabled={!currentOrder || polling}
-                        onClick={() => {
-                          void checkCurrentOrderStatus();
-                        }}
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        刷新状态
-                      </Button>
-                    </div>
-
-                    {paymentError ? (
-                      <div className="w-full rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
-                        {paymentError}
+                <CardContent className="space-y-6 py-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">真实收银台</div>
+                        <div className="mt-3 text-3xl font-black text-white">{selectedProduct ? formatCurrency(selectedProduct.price) : "--"}</div>
+                        <p className="mt-2 text-sm text-slate-300/75">订单号 {currentOrder?.orderId || "--"}，支付完成后此页会自动更新状态。</p>
                       </div>
-                    ) : null}
+                      <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                        当前已接通微信收银台
+                      </div>
+                    </div>
                   </div>
+
+                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">支付方式</div>
+                      <div className="mt-2 font-medium text-white">微信 Native</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">状态轮询</div>
+                      <div className="mt-2 font-medium text-white">{polling ? "轮询中" : "等待手动刷新"}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      className="bg-white text-slate-950 hover:bg-slate-100"
+                      disabled={!currentOrder?.payUrl}
+                      onClick={() => {
+                        if (currentOrder?.payUrl) {
+                          window.open(currentOrder.payUrl, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      打开真实收银台
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
+                      disabled={!currentOrder || polling}
+                      onClick={() => {
+                        void checkCurrentOrderStatus();
+                      }}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      刷新状态
+                    </Button>
+                  </div>
+
+                  {polling ? (
+                    <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+                      正在轮询支付结果，支付成功后会自动跳转成功态。
+                    </div>
+                  ) : null}
+
+                  {paymentError ? (
+                    <div className="w-full rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                      {paymentError}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             )}
@@ -508,7 +551,7 @@ function CheckoutContent() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">支付方式</span>
-                <span className="font-medium">{paymentMethod === "wechat_native" ? "微信支付" : "支付宝"}</span>
+                <span className="font-medium">微信支付</span>
               </div>
               <div className="flex items-center justify-between border-t pt-4">
                 <span className="text-xs font-black uppercase tracking-[0.24em] text-muted-foreground">Total Amount</span>
@@ -516,6 +559,11 @@ function CheckoutContent() {
                   {selectedProduct ? formatCurrency(selectedProduct.price) : "--"}
                 </span>
               </div>
+              {step === "select" && paymentError ? (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                  {paymentError}
+                </div>
+              ) : null}
               {step === "select" ? (
                 <Button className="mt-4 h-12 w-full text-lg font-bold shadow-md shadow-primary/20" onClick={handleCheckout} disabled={!selectedProduct || creating}>
                   {creating ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
@@ -533,18 +581,30 @@ function CheckoutContent() {
             <CardContent className="px-0">
               <DataState
                 loading={ordersLoading}
-                error={ordersError}
-                isEmpty={!ordersLoading && (orders?.items.length || 0) === 0}
+                error={ordersComingSoon ? null : ordersError}
+                isEmpty={!ordersLoading && (ordersComingSoon || (orders?.items.length || 0) === 0)}
                 loadingState={<TableSkeleton rows={4} columns={2} />}
                 onRetry={() => {
                   void loadOrders();
                 }}
                 emptyState={
-                  <WarmEmptyState
-                    icon={Sparkles}
-                    title="还没有历史订单"
-                    description="创建第一笔支付订单后，这里会显示最近的支付状态与时间。"
-                  />
+                  ordersComingSoon ? (
+                    <WarmEmptyState
+                      icon={Sparkles}
+                      title="订单历史即将上线"
+                      description="当前环境尚未开放订单历史接口，后端发布后这里会直接显示最近的支付状态与时间。"
+                      actionLabel="重新加载"
+                      onAction={() => {
+                        void loadOrders();
+                      }}
+                    />
+                  ) : (
+                    <WarmEmptyState
+                      icon={Sparkles}
+                      title="还没有历史订单"
+                      description="创建第一笔支付订单后，这里会显示最近的支付状态与时间。"
+                    />
+                  )
                 }
               >
                 <Table>
