@@ -24,7 +24,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type PaginatedResponse,
   type PaymentOrder,
@@ -52,10 +51,8 @@ function CheckoutContent() {
 
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [productsComingSoon, setProductsComingSoon] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
-  const [ordersComingSoon, setOrdersComingSoon] = useState(false);
   const [products, setProducts] = useState<PaymentProduct[]>([]);
   const [orders, setOrders] = useState<PaginatedResponse<PaymentOrder> | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -69,19 +66,14 @@ function CheckoutContent() {
   const loadProducts = async () => {
     setProductsLoading(true);
     setProductsError(null);
-    setProductsComingSoon(false);
 
     try {
       const response = await api.payment.products();
       const nextProducts = sortPaymentProducts(response.data);
       setProducts(nextProducts);
     } catch (error) {
-      if (isApiNotFoundError(error)) {
-        setProducts([]);
-        setProductsComingSoon(true);
-      } else {
-        setProductsError(readApiErrorMessage(error, "支付商品加载失败，请稍后重试。"));
-      }
+      setProducts([]);
+      setProductsError(readApiErrorMessage(error, "支付商品加载失败，请稍后重试。"));
     } finally {
       setProductsLoading(false);
     }
@@ -90,32 +82,21 @@ function CheckoutContent() {
   const loadOrders = async () => {
     setOrdersLoading(true);
     setOrdersError(null);
-    setOrdersComingSoon(false);
 
     try {
       const response = await api.payment.orders({ page: 1, limit: ORDER_PAGE_SIZE });
       setOrders(response.data);
     } catch (error) {
-      if (isApiNotFoundError(error)) {
-        setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
-        setOrdersComingSoon(true);
-      } else {
-        setOrdersError(readApiErrorMessage(error, "最近订单加载失败，请稍后重试。"));
-      }
+      setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
+      setOrdersError(readApiErrorMessage(error, "最近订单加载失败，请稍后重试。"));
     } finally {
       setOrdersLoading(false);
     }
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadProducts();
-      void loadOrders();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    void loadProducts();
+    void loadOrders();
   }, []);
 
   useEffect(() => {
@@ -189,7 +170,7 @@ function CheckoutContent() {
         toast.message(`当前订单状态：${getPaymentStatusLabel(nextOrder.status)}`);
       }
     } catch (error) {
-      const message = isApiNotFoundError(error) ? "订单状态接口即将上线，请稍后回到 Billing 查看支付结果。" : readApiErrorMessage(error, "订单状态查询失败，请稍后重试。");
+      const message = readApiErrorMessage(error, "订单状态查询失败，请稍后重试。");
       setPolling(false);
       setPaymentError(message);
       if (!options?.silent) {
@@ -237,7 +218,7 @@ function CheckoutContent() {
         }
       } catch (error) {
         if (!cancelled) {
-          const message = isApiNotFoundError(error) ? "订单状态接口即将上线，请稍后回到 Billing 查看支付结果。" : readApiErrorMessage(error, "订单状态轮询失败，请稍后手动刷新。");
+          const message = readApiErrorMessage(error, "订单状态轮询失败，请稍后手动刷新。");
           setPolling(false);
           setPaymentError(message);
         }
@@ -299,7 +280,7 @@ function CheckoutContent() {
 
       void loadOrders();
     } catch (error) {
-      const message = isApiNotFoundError(error) ? "支付创建接口即将上线，当前环境暂时无法生成真实收银台链接。" : readApiErrorMessage(error, "创建支付订单失败，请稍后重试。");
+      const message = readApiErrorMessage(error, "创建支付订单失败，请稍后重试。");
       setPaymentError(message);
       toast.error(message);
     } finally {
@@ -365,33 +346,21 @@ function CheckoutContent() {
         <div className="space-y-6">
           <DataState
             loading={productsLoading}
-            error={productsComingSoon ? null : productsError}
-            isEmpty={!productsLoading && (productsComingSoon || products.length === 0)}
+            error={productsError}
+            isEmpty={!productsLoading && !productsError && products.length === 0}
             onRetry={() => {
               void loadProducts();
             }}
             emptyState={
-              productsComingSoon ? (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="支付方案即将上线"
-                  description="当前环境尚未开放支付商品接口，后端发布后这里会直接展示真实额度包与收银台入口。"
-                  actionLabel="重新加载"
-                  onAction={() => {
-                    void loadProducts();
-                  }}
-                />
-              ) : (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="暂无可购买商品"
-                  description="等支付商品配置完成后，这里会自动展示真实视频包。"
-                  actionLabel="返回 Billing"
-                  onAction={() => {
-                    window.location.href = "/dashboard/billing";
-                  }}
-                />
-              )
+              <WarmEmptyState
+                icon={Sparkles}
+                title="暂无可购买商品"
+                description="等支付商品配置完成后，这里会自动展示真实视频包。"
+                actionLabel="返回 Billing"
+                onAction={() => {
+                  window.location.href = "/dashboard/billing";
+                }}
+              />
             }
           >
             {step === "select" ? (
@@ -581,30 +550,18 @@ function CheckoutContent() {
             <CardContent className="px-0">
               <DataState
                 loading={ordersLoading}
-                error={ordersComingSoon ? null : ordersError}
-                isEmpty={!ordersLoading && (ordersComingSoon || (orders?.items.length || 0) === 0)}
+                error={ordersError}
+                isEmpty={!ordersLoading && !ordersError && (orders?.items.length || 0) === 0}
                 loadingState={<TableSkeleton rows={4} columns={2} />}
                 onRetry={() => {
                   void loadOrders();
                 }}
                 emptyState={
-                  ordersComingSoon ? (
-                    <WarmEmptyState
-                      icon={Sparkles}
-                      title="订单历史即将上线"
-                      description="当前环境尚未开放订单历史接口，后端发布后这里会直接显示最近的支付状态与时间。"
-                      actionLabel="重新加载"
-                      onAction={() => {
-                        void loadOrders();
-                      }}
-                    />
-                  ) : (
-                    <WarmEmptyState
-                      icon={Sparkles}
-                      title="还没有历史订单"
-                      description="创建第一笔支付订单后，这里会显示最近的支付状态与时间。"
-                    />
-                  )
+                  <WarmEmptyState
+                    icon={Sparkles}
+                    title="还没有历史订单"
+                    description="创建第一笔支付订单后，这里会显示最近的支付状态与时间。"
+                  />
                 }
               >
                 <Table>
