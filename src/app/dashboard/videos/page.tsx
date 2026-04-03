@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   FileVideo,
   Play,
   Plus,
@@ -21,12 +23,17 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, isApiNotFoundError, readApiErrorMessage, type Video } from "@/lib/api";
+import {
+  api,
+  readApiErrorMessage,
+  type PaginatedResponse,
+  type Video,
+} from "@/lib/api";
 import { formatCompactNumber, formatDate } from "@/lib/format";
 import { normalizeVideoStatus } from "@/lib/video-status";
 import { wsManager } from "@/lib/ws";
 
-const PAGE_LIMIT = 50;
+const PAGE_LIMIT = 20;
 
 function StatCard({ title, value, description }: { title: string; value: string; description: string }) {
   return (
@@ -47,41 +54,56 @@ function StatCard({ title, value, description }: { title: string; value: string;
 export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [comingSoon, setComingSoon] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [videosPage, setVideosPage] = useState<PaginatedResponse<Video> | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  const loadVideos = async (options?: { silent?: boolean }) => {
-    if (options?.silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
-    setError(null);
-    setComingSoon(false);
-
-    try {
-      const response = await api.videos.list({ page: 1, limit: PAGE_LIMIT });
-      setVideos(response.data.items);
-    } catch (loadError) {
-      if (isApiNotFoundError(loadError)) {
-        setVideos([]);
-        setComingSoon(true);
-      } else {
-        setError(readApiErrorMessage(loadError, "视频列表加载失败，请稍后重试。"));
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const [page, setPage] = useState(1);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
-    void loadVideos();
-  }, []);
+    let cancelled = false;
+
+    const run = async () => {
+      setError(null);
+      if (loading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
+      try {
+        const response = await api.videos.list({
+          page,
+          limit: PAGE_LIMIT,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setVideosPage(response.data);
+        setVideos(response.data.items);
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(readApiErrorMessage(loadError, "视频列表加载失败，请稍后重试。"));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, reloadNonce, statusFilter]);
 
   useEffect(() => {
     const offProgress = wsManager.on("video_progress", (payload) => {
@@ -131,17 +153,19 @@ export default function VideosPage() {
     };
   }, []);
 
-  const filteredVideos = videos.filter((video) => {
-    const normalizedStatus = normalizeVideoStatus(video.lifecycleStatus || video.status);
-    const matchesStatus = statusFilter === "all" || normalizedStatus === statusFilter;
+  const filteredVideos = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase();
-    const matchesKeyword = !keyword || [video.title, video.brand].some((value) => value.toLowerCase().includes(keyword));
+    if (!keyword) {
+      return videos;
+    }
 
-    return matchesStatus && matchesKeyword;
-  });
+    return videos.filter((video) => (
+      [video.title, video.brand].some((value) => value.toLowerCase().includes(keyword))
+    ));
+  }, [searchQuery, videos]);
 
   const summary = {
-    total: videos.length,
+    total: videosPage?.total || 0,
     processing: videos.filter((video) => normalizeVideoStatus(video.lifecycleStatus || video.status) === "processing").length,
     completed: videos.filter((video) => {
       const status = normalizeVideoStatus(video.lifecycleStatus || video.status);
@@ -149,6 +173,7 @@ export default function VideosPage() {
     }).length,
     failed: videos.filter((video) => normalizeVideoStatus(video.lifecycleStatus || video.status) === "failed").length,
   };
+  const totalPages = Math.max(1, Math.ceil((videosPage?.total || 0) / PAGE_LIMIT));
 
   return (
     <div className="flex flex-col gap-8 pb-10 animate-in fade-in duration-500">
@@ -163,7 +188,7 @@ export default function VideosPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">我的视频</h1>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
-              查看真实视频任务列表、生产进度和输出结果。状态与进度会直接跟随后端任务和 WebSocket 事件刷新。
+              直接对接 `/api/v1/videos` 的真实分页结果，支持状态筛选、关键词过滤和详情跳转。
             </p>
           </div>
         </div>
@@ -174,7 +199,7 @@ export default function VideosPage() {
             className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
             disabled={loading || refreshing}
             onClick={() => {
-              void loadVideos({ silent: true });
+              setReloadNonce((current) => current + 1);
             }}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
@@ -188,10 +213,10 @@ export default function VideosPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="全部任务" value={formatCompactNumber(summary.total)} description="真实任务总数，默认拉取最近 50 条。" />
-        <StatCard title="处理中" value={formatCompactNumber(summary.processing)} description="正在排队、渲染或等待后处理的任务。" />
-        <StatCard title="已完成" value={formatCompactNumber(summary.completed)} description="已可下载或进入后续审批/发布阶段的视频。" />
-        <StatCard title="失败" value={formatCompactNumber(summary.failed)} description="需要排查输入素材或后端执行日志的任务。" />
+        <StatCard title="全部任务" value={formatCompactNumber(summary.total)} description="符合当前状态筛选的真实任务总数。" />
+        <StatCard title="处理中" value={formatCompactNumber(summary.processing)} description="当前页中正在排队、渲染或后处理的任务。" />
+        <StatCard title="已完成" value={formatCompactNumber(summary.completed)} description="当前页中已生成成片的视频任务。" />
+        <StatCard title="失败" value={formatCompactNumber(summary.failed)} description="当前页中需要排查执行链路的任务。" />
       </div>
 
       <Card className="border-border/70 bg-card/70">
@@ -199,7 +224,7 @@ export default function VideosPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <CardTitle>视频列表</CardTitle>
-              <CardDescription>来自 `/api/v1/videos` 的真实任务列表，支持关键词和状态筛选。</CardDescription>
+              <CardDescription>详情页继续通过 `/api/v1/videos/:id` 拉取单条任务和迭代记录。</CardDescription>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <div className="relative min-w-[220px]">
@@ -211,7 +236,16 @@ export default function VideosPage() {
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
               </div>
-              <Select value={statusFilter} onValueChange={(value) => value && setStatusFilter(value)}>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  setStatusFilter(value);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="筛选状态" />
                 </SelectTrigger>
@@ -230,44 +264,37 @@ export default function VideosPage() {
         <CardContent>
           <DataState
             loading={loading}
-            error={comingSoon ? null : error}
-            isEmpty={!loading && !error && (comingSoon || filteredVideos.length === 0)}
+            error={error}
+            isEmpty={!loading && !error && filteredVideos.length === 0}
             loadingState={<TableSkeleton rows={6} columns={6} />}
             onRetry={() => {
-              void loadVideos();
+              setReloadNonce((current) => current + 1);
             }}
             emptyState={
-              comingSoon ? (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="视频库即将上线"
-                  description="当前环境未开放视频列表接口，后端准备好后这里会直接展示真实任务和状态。"
-                  actionLabel="重新加载"
-                  onAction={() => {
-                    void loadVideos();
-                  }}
-                />
-              ) : (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title={searchQuery || statusFilter !== "all" ? "没有匹配的视频任务" : "还没有任何视频任务"}
-                  description={searchQuery || statusFilter !== "all"
-                    ? "换个关键词或状态试试，真实任务列表会在这里即时刷新。"
-                    : "提交第一条真实视频任务后，这里会开始展示进度、状态和输出结果。"}
-                  actionLabel={searchQuery || statusFilter !== "all" ? "清空筛选" : "创建第一条视频"}
-                  onAction={() => {
-                    if (searchQuery || statusFilter !== "all") {
-                      setSearchQuery("");
-                      setStatusFilter("all");
-                      return;
-                    }
-
-                    window.location.href = "/dashboard/videos/create";
-                  }}
-                />
-              )
+              <WarmEmptyState
+                icon={Sparkles}
+                title={searchQuery ? "当前页没有匹配的视频任务" : "还没有任何视频任务"}
+                description={searchQuery
+                  ? "换个关键词试试，或切换分页查看其它真实任务。"
+                  : "提交第一条真实视频任务后，这里会开始展示进度、状态和输出结果。"}
+                actionLabel={searchQuery ? "清空搜索" : "创建第一条视频"}
+                onAction={() => {
+                  if (searchQuery) {
+                    setSearchQuery("");
+                    return;
+                  }
+                  window.location.href = "/dashboard/videos/create";
+                }}
+              />
             }
           >
+            <div className="mb-4 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                第 {page} / {totalPages} 页，共 {formatCompactNumber(videosPage?.total || 0)} 条
+              </span>
+              <span>关键词过滤只作用于当前页，状态筛选由后端分页接口执行。</span>
+            </div>
+
             <div className="hidden overflow-hidden rounded-2xl border border-border/70 md:block">
               <Table>
                 <TableHeader>
@@ -338,23 +365,67 @@ export default function VideosPage() {
                           </div>
                         ) : null}
                       </div>
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <Link href={`/dashboard/videos/${video.id}`} className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold">{video.title}</div>
-                            <div className="text-[11px] text-muted-foreground">{video.brand}</div>
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <div className="space-y-2">
+                          <Link href={`/dashboard/videos/${video.id}`} className="block truncate text-base font-semibold hover:text-primary">
+                            {video.title}
                           </Link>
-                          <VideoStatusBadge status={video.lifecycleStatus || video.status} progress={video.progress} className="shrink-0" />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{video.brand}</Badge>
+                            <VideoStatusBadge status={video.lifecycleStatus || video.status} progress={video.progress} />
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span>{formatDate(video.createdAt || video.date)}</span>
-                          <span>{formatCompactNumber(video.credits)} 条额度</span>
+                        <div className="grid grid-cols-2 gap-3 text-sm text-muted-foreground">
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em]">创建日期</div>
+                            <div className="mt-1">{formatDate(video.createdAt || video.date)}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em]">消耗条数</div>
+                            <div className="mt-1">{formatCompactNumber(video.credits)}</div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1" render={<Link href={`/dashboard/videos/${video.id}`} />}>
+                            查看详情
+                          </Button>
+                          {video.outputVideoUrl ? (
+                            <Button variant="outline" className="flex-1" render={<a href={video.outputVideoUrl} target="_blank" rel="noreferrer" />}>
+                              下载成片
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                当前每页 {PAGE_LIMIT} 条，服务端返回总数 {formatCompactNumber(videosPage?.total || 0)}。
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1 || loading || refreshing}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages || loading || refreshing}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  下一页
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </DataState>
         </CardContent>

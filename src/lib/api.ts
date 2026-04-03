@@ -1344,7 +1344,16 @@ function normalizePaginated<T>(
   }
 
   const record = objectValue(payload) || {};
-  const items = arrayValue(record.items).map((item) => mapper(item));
+  const rawItems = Array.isArray(record.items)
+    ? record.items
+    : Array.isArray(record.tasks)
+      ? record.tasks
+      : Array.isArray(record.orders)
+        ? record.orders
+        : Array.isArray(record.records)
+          ? record.records
+          : [];
+  const items = rawItems.map((item) => mapper(item));
 
   return {
     items,
