@@ -24,8 +24,10 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   api,
+  isApiNotFoundError,
   readApiErrorMessage,
   type AccountSnapshot,
+  type BillingInvoiceRecord,
   type PaginatedResponse,
   type PaymentOrder,
   type PaymentProduct,
@@ -123,43 +125,80 @@ function OrderStatusBadge({ status }: { status: string }) {
 export default function BillingPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [accountComingSoon, setAccountComingSoon] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [productsComingSoon, setProductsComingSoon] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [ordersComingSoon, setOrdersComingSoon] = useState(false);
   const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageComingSoon, setUsageComingSoon] = useState(false);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const [invoiceComingSoon, setInvoiceComingSoon] = useState(false);
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [products, setProducts] = useState<PaymentProduct[]>([]);
   const [orders, setOrders] = useState<PaginatedResponse<PaymentOrder> | null>(null);
   const [usageDetail, setUsageDetail] = useState<PaginatedResponse<UsageDetailItem> | null>(null);
+  const [invoices, setInvoices] = useState<PaginatedResponse<BillingInvoiceRecord> | null>(null);
 
   const loadSummary = async () => {
     setSummaryLoading(true);
     setSummaryError(null);
+    setAccountComingSoon(false);
 
     try {
-      const [accountResponse, productsResponse] = await Promise.all([
-        api.account.get(),
-        api.payment.products(),
-      ]);
-
-      setAccount(accountResponse.data);
-      setProducts(sortPaymentProducts(productsResponse.data));
+      const response = await api.account.get();
+      setAccount(response.data);
     } catch (error) {
-      setSummaryError(readApiErrorMessage(error, "账单概览加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setAccount(null);
+        setAccountComingSoon(true);
+      } else {
+        setSummaryError(readApiErrorMessage(error, "账单概览加载失败，请稍后重试。"));
+      }
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const loadProducts = async () => {
+    setProductsLoading(true);
+    setProductsError(null);
+    setProductsComingSoon(false);
+
+    try {
+      const response = await api.payment.products();
+      setProducts(sortPaymentProducts(response.data));
+    } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setProducts([]);
+        setProductsComingSoon(true);
+      } else {
+        setProductsError(readApiErrorMessage(error, "支付商品加载失败，请稍后重试。"));
+      }
+    } finally {
+      setProductsLoading(false);
     }
   };
 
   const loadOrders = async () => {
     setOrdersLoading(true);
     setOrdersError(null);
+    setOrdersComingSoon(false);
 
     try {
       const response = await api.payment.orders({ page: 1, limit: ORDER_PAGE_SIZE });
       setOrders(response.data);
     } catch (error) {
-      setOrdersError(readApiErrorMessage(error, "订单记录加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
+        setOrdersComingSoon(true);
+      } else {
+        setOrdersError(readApiErrorMessage(error, "订单记录加载失败，请稍后重试。"));
+      }
     } finally {
       setOrdersLoading(false);
     }
@@ -168,21 +207,55 @@ export default function BillingPage() {
   const loadUsageDetail = async () => {
     setUsageLoading(true);
     setUsageError(null);
+    setUsageComingSoon(false);
 
     try {
       const response = await api.account.usageDetail({ page: 1, limit: USAGE_PAGE_SIZE });
       setUsageDetail(response.data);
     } catch (error) {
-      setUsageError(readApiErrorMessage(error, "消耗记录加载失败，请稍后重试。"));
+      if (isApiNotFoundError(error)) {
+        setUsageDetail({ items: [], total: 0, page: 1, limit: USAGE_PAGE_SIZE });
+        setUsageComingSoon(true);
+      } else {
+        setUsageError(readApiErrorMessage(error, "消耗记录加载失败，请稍后重试。"));
+      }
     } finally {
       setUsageLoading(false);
     }
   };
 
+  const loadInvoices = async () => {
+    setInvoicesLoading(true);
+    setInvoicesError(null);
+    setInvoiceComingSoon(false);
+
+    try {
+      const response = await api.billing.invoices({ page: 1, limit: ORDER_PAGE_SIZE });
+      setInvoices(response.data);
+    } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setInvoices({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
+        setInvoiceComingSoon(true);
+      } else {
+        setInvoicesError(readApiErrorMessage(error, "发票记录加载失败，请稍后重试。"));
+      }
+    } finally {
+      setInvoicesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void loadSummary();
-    void loadOrders();
-    void loadUsageDetail();
+    const timer = window.setTimeout(() => {
+      void loadSummary();
+      void loadProducts();
+      void loadOrders();
+      void loadUsageDetail();
+      void loadInvoices();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const productMap = new Map(products.map((product) => [product.id, product]));
@@ -193,12 +266,37 @@ export default function BillingPage() {
       const rightTime = new Date(right.purchasedAt || 0).getTime();
       return rightTime - leftTime;
     });
-  const paidOrders = (orders?.items || []).filter((order) => isPaidPaymentStatus(order.status));
   const pendingOrders = (orders?.items || []).filter((order) => !isPaidPaymentStatus(order.status) && !isFailedPaymentStatus(order.status));
   const totalBalance = account?.credits.remaining ?? 0;
   const totalCredits = account?.credits.total ?? 0;
   const monthlyUsed = account?.currentPeriod.creditsConsumed ?? account?.credits.used ?? 0;
   const estimatedCost = (usageDetail?.items || []).reduce((total, item) => total + item.tokenCost, 0);
+  const recentInvoiceAmount = (invoices?.items || []).reduce((total, invoice) => total + invoice.amount, 0);
+  const hasTopSectionData = Boolean(account) || products.length > 0;
+  const topSectionComingSoon = !hasTopSectionData && (accountComingSoon || productsComingSoon);
+  const bestValueProductId = products.reduce<string | null>((bestId, product) => {
+    if (product.unitCredits <= 0) {
+      return bestId;
+    }
+
+    if (!bestId) {
+      return product.id;
+    }
+
+    const bestProduct = products.find((item) => item.id === bestId);
+    if (!bestProduct || bestProduct.unitCredits <= 0) {
+      return product.id;
+    }
+
+    const currentUnitPrice = product.price / product.unitCredits;
+    const bestUnitPrice = bestProduct.price / bestProduct.unitCredits;
+    return currentUnitPrice < bestUnitPrice ? product.id : bestId;
+  }, null);
+  const sectionWarnings = [
+    accountComingSoon ? "账户账本接口尚未开放，余额与资源包视图会在发布后自动切换为真实数据。" : null,
+    productsComingSoon ? "支付商品接口尚未开放，购买方案列表会在发布后自动出现。" : null,
+    invoiceComingSoon ? "发票接口尚未开放，近期开票金额和发票历史会在发布后补齐。" : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="flex flex-col gap-8 animate-in fade-in duration-500">
@@ -222,14 +320,16 @@ export default function BillingPage() {
           <Button
             variant="outline"
             className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
-            disabled={summaryLoading || ordersLoading || usageLoading}
+            disabled={summaryLoading || productsLoading || ordersLoading || usageLoading || invoicesLoading}
             onClick={() => {
               void loadSummary();
+              void loadProducts();
               void loadOrders();
               void loadUsageDetail();
+              void loadInvoices();
             }}
           >
-            <RefreshCw className={`mr-2 h-4 w-4 ${(summaryLoading || ordersLoading || usageLoading) ? "animate-spin" : ""}`} />
+            <RefreshCw className={`mr-2 h-4 w-4 ${(summaryLoading || productsLoading || ordersLoading || usageLoading || invoicesLoading) ? "animate-spin" : ""}`} />
             刷新账单
           </Button>
           <Button variant="outline" className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]" render={<Link href="/dashboard/subscription" />}>
@@ -239,22 +339,38 @@ export default function BillingPage() {
       </div>
 
       <DataState
-        loading={summaryLoading}
-        error={summaryError}
-        isEmpty={!summaryLoading && !summaryError && !account && products.length === 0}
+        loading={summaryLoading || productsLoading || invoicesLoading}
+        error={topSectionComingSoon ? null : summaryError}
+        isEmpty={!(summaryLoading || productsLoading || invoicesLoading) && (topSectionComingSoon || (!summaryError && !hasTopSectionData))}
         onRetry={() => {
           void loadSummary();
+          void loadProducts();
+          void loadInvoices();
         }}
         emptyState={
-          <WarmEmptyState
-            icon={Sparkles}
-            title="你的账本还没开始运转"
-            description="首笔充值完成后，这里会开始展示余额、资源包和支付历史。"
-            actionLabel="去购买额度"
-            onAction={() => {
-              window.location.href = "/dashboard/billing/checkout";
-            }}
-          />
+          topSectionComingSoon ? (
+            <WarmEmptyState
+              icon={Sparkles}
+              title="账单面板即将上线"
+              description="当前环境尚未开放账本或商品接口，后端发布后这里会直接展示真实余额、资源包和发票数据。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadSummary();
+                void loadProducts();
+                void loadInvoices();
+              }}
+            />
+          ) : (
+            <WarmEmptyState
+              icon={Sparkles}
+              title="你的账本还没开始运转"
+              description="首笔充值完成后，这里会开始展示余额、资源包和支付历史。"
+              actionLabel="去购买额度"
+              onAction={() => {
+                window.location.href = "/dashboard/billing/checkout";
+              }}
+            />
+          )
         }
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -278,11 +394,17 @@ export default function BillingPage() {
           />
           <SummaryCard
             title="近期开票金额"
-            value={formatCurrency(paidOrders.reduce((total, order) => total + resolveOrderAmount(order, productMap), 0))}
+            value={formatCurrency(recentInvoiceAmount)}
             description={`待支付订单 ${formatCompactNumber(pendingOrders.length)} 笔，估算 Token 成本 ${formatCurrency(estimatedCost)}。`}
             icon={CreditCard}
           />
         </div>
+
+        {sectionWarnings.length > 0 ? (
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            {sectionWarnings.join(" ")}
+          </div>
+        ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <Card className="overflow-hidden border-white/10 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.14),transparent_30%),rgba(2,6,23,0.88)] shadow-[0_28px_90px_-56px_rgba(14,165,233,0.35)]">
@@ -294,15 +416,27 @@ export default function BillingPage() {
             </CardHeader>
             <CardContent>
               {activePacks.length === 0 ? (
-                <WarmEmptyState
-                  icon={Package}
-                  title="还没有生效中的资源包"
-                  description="完成第一笔购买后，这里会列出每个资源包的余额与使用进度。"
-                  actionLabel="立即购买"
-                  onAction={() => {
-                    window.location.href = "/dashboard/billing/checkout";
-                  }}
-                />
+                accountComingSoon ? (
+                  <WarmEmptyState
+                    icon={Package}
+                    title="资源包视图即将上线"
+                    description="当前环境尚未开放账户资源包接口，后端发布后这里会直接显示真实剩余条数和使用进度。"
+                    actionLabel="重新加载"
+                    onAction={() => {
+                      void loadSummary();
+                    }}
+                  />
+                ) : (
+                  <WarmEmptyState
+                    icon={Package}
+                    title="还没有生效中的资源包"
+                    description="完成第一笔购买后，这里会列出每个资源包的余额与使用进度。"
+                    actionLabel="立即购买"
+                    onAction={() => {
+                      window.location.href = "/dashboard/billing/checkout";
+                    }}
+                  />
+                )
               ) : (
                 <div className="space-y-4">
                   {activePacks.map((pack) => {
@@ -352,7 +486,29 @@ export default function BillingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {products.length === 0 ? (
+              {productsError ? (
+                <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
+                  <DataState
+                    loading={false}
+                    error={productsError}
+                    onRetry={() => {
+                      void loadProducts();
+                    }}
+                  >
+                    <></>
+                  </DataState>
+                </div>
+              ) : productsComingSoon ? (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="视频包即将上线"
+                  description="当前环境尚未开放支付商品接口，后端发布后这里会直接展示真实可售额度包。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadProducts();
+                  }}
+                />
+              ) : products.length === 0 ? (
                 <WarmEmptyState
                   icon={Sparkles}
                   title="还没有可购买的视频包"
@@ -360,8 +516,8 @@ export default function BillingPage() {
                 />
               ) : (
                 <div className="space-y-4">
-                  {products.map((product, index) => {
-                    const isPopular = index === 1 || index === 2;
+                  {products.map((product) => {
+                    const isPopular = product.id === bestValueProductId;
                     const unitPrice = product.unitCredits > 0 ? product.price / product.unitCredits : product.price;
 
                     return (
@@ -413,22 +569,34 @@ export default function BillingPage() {
         <CardContent>
           <DataState
             loading={ordersLoading}
-            error={ordersError}
-            isEmpty={!ordersLoading && (orders?.items.length || 0) === 0}
+            error={ordersComingSoon ? null : ordersError}
+            isEmpty={!ordersLoading && (ordersComingSoon || (orders?.items.length || 0) === 0)}
             loadingState={<TableSkeleton rows={6} columns={5} />}
             onRetry={() => {
               void loadOrders();
             }}
             emptyState={
-              <WarmEmptyState
-                icon={CreditCard}
-                title="还没有支付订单"
-                description="当你创建第一笔购买订单后，这里会展示订单号、金额和支付状态。"
-                actionLabel="创建订单"
-                onAction={() => {
-                  window.location.href = "/dashboard/billing/checkout";
-                }}
-              />
+              ordersComingSoon ? (
+                <WarmEmptyState
+                  icon={CreditCard}
+                  title="订单记录即将上线"
+                  description="当前环境尚未开放订单历史接口，后端发布后这里会直接展示真实支付状态与金额。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadOrders();
+                  }}
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={CreditCard}
+                  title="还没有支付订单"
+                  description="当你创建第一笔购买订单后，这里会展示订单号、金额和支付状态。"
+                  actionLabel="创建订单"
+                  onAction={() => {
+                    window.location.href = "/dashboard/billing/checkout";
+                  }}
+                />
+              )
             }
           >
             <div className="overflow-hidden rounded-2xl border border-border/70">
@@ -474,6 +642,82 @@ export default function BillingPage() {
 
       <Card className="overflow-hidden border-border/70 bg-card/70">
         <CardHeader>
+          <CardTitle>发票记录</CardTitle>
+          <CardDescription>
+            从 `/api/v1/billing/invoices` 读取真实开票历史，方便和订单、消耗账本进行交叉核对。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataState
+            loading={invoicesLoading}
+            error={invoiceComingSoon ? null : invoicesError}
+            isEmpty={!invoicesLoading && (invoiceComingSoon || (invoices?.items.length || 0) === 0)}
+            loadingState={<TableSkeleton rows={4} columns={5} />}
+            onRetry={() => {
+              void loadInvoices();
+            }}
+            emptyState={
+              invoiceComingSoon ? (
+                <WarmEmptyState
+                  icon={CreditCard}
+                  title="发票中心即将上线"
+                  description="当前环境尚未开放发票接口，后端发布后这里会直接展示真实开票金额、状态和下载入口。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadInvoices();
+                  }}
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={CreditCard}
+                  title="还没有开票记录"
+                  description="当产生首笔可开票订单后，这里会开始沉淀发票编号、金额和状态。"
+                />
+              )
+            }
+          >
+            <div className="overflow-hidden rounded-2xl border border-border/70">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead>发票号</TableHead>
+                    <TableHead>金额</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>开票时间</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(invoices?.items || []).map((invoice) => (
+                    <TableRow key={invoice.id} className="hover:bg-muted/20">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{invoice.number}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(invoice.amount)}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10">
+                          {invoice.status || "pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDateTime(invoice.issuedAt || invoice.paidAt || invoice.dueAt)}</TableCell>
+                      <TableCell>
+                        {invoice.downloadUrl ? (
+                          <Button variant="ghost" size="sm" render={<a href={invoice.downloadUrl} target="_blank" rel="noreferrer" />}>
+                            查看
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">待生成</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </DataState>
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden border-border/70 bg-card/70">
+        <CardHeader>
           <CardTitle>消耗记录</CardTitle>
           <CardDescription>
             从 `/api/v1/account/usage/detail` 读取真实消耗明细，方便对照余额与任务消耗来源。
@@ -482,22 +726,34 @@ export default function BillingPage() {
         <CardContent>
           <DataState
             loading={usageLoading}
-            error={usageError}
-            isEmpty={!usageLoading && (usageDetail?.items.length || 0) === 0}
+            error={usageComingSoon ? null : usageError}
+            isEmpty={!usageLoading && (usageComingSoon || (usageDetail?.items.length || 0) === 0)}
             loadingState={<TableSkeleton rows={6} columns={5} />}
             onRetry={() => {
               void loadUsageDetail();
             }}
             emptyState={
-              <WarmEmptyState
-                icon={Sparkles}
-                title="还没有额度消耗记录"
-                description="当你开始生成真实视频后，这里会自动沉淀每一条消耗账本。"
-                actionLabel="去生成视频"
-                onAction={() => {
-                  window.location.href = "/dashboard/videos/create";
-                }}
-              />
+              usageComingSoon ? (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="消耗账本即将上线"
+                  description="当前环境尚未开放用量明细接口，后端发布后这里会直接展示每一条真实消耗记录。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadUsageDetail();
+                  }}
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="还没有额度消耗记录"
+                  description="当你开始生成真实视频后，这里会自动沉淀每一条消耗账本。"
+                  actionLabel="去生成视频"
+                  onAction={() => {
+                    window.location.href = "/dashboard/videos/create";
+                  }}
+                />
+              )
             }
           >
             <div className="overflow-hidden rounded-2xl border border-border/70">
