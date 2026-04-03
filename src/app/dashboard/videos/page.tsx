@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   FileVideo,
-  Loader2,
   Play,
   Plus,
   RefreshCw,
@@ -22,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, readApiErrorMessage, type Video } from "@/lib/api";
+import { api, isApiNotFoundError, readApiErrorMessage, type Video } from "@/lib/api";
 import { formatCompactNumber, formatDate } from "@/lib/format";
 import { normalizeVideoStatus } from "@/lib/video-status";
 import { wsManager } from "@/lib/ws";
@@ -48,6 +47,7 @@ function StatCard({ title, value, description }: { title: string; value: string;
 export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [comingSoon, setComingSoon] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,12 +61,18 @@ export default function VideosPage() {
     }
 
     setError(null);
+    setComingSoon(false);
 
     try {
       const response = await api.videos.list({ page: 1, limit: PAGE_LIMIT });
       setVideos(response.data.items);
     } catch (loadError) {
-      setError(readApiErrorMessage(loadError, "视频列表加载失败，请稍后重试。"));
+      if (isApiNotFoundError(loadError)) {
+        setVideos([]);
+        setComingSoon(true);
+      } else {
+        setError(readApiErrorMessage(loadError, "视频列表加载失败，请稍后重试。"));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -224,30 +230,42 @@ export default function VideosPage() {
         <CardContent>
           <DataState
             loading={loading}
-            error={error}
-            isEmpty={!loading && filteredVideos.length === 0}
+            error={comingSoon ? null : error}
+            isEmpty={!loading && !error && (comingSoon || filteredVideos.length === 0)}
             loadingState={<TableSkeleton rows={6} columns={6} />}
             onRetry={() => {
               void loadVideos();
             }}
             emptyState={
-              <WarmEmptyState
-                icon={Sparkles}
-                title={searchQuery || statusFilter !== "all" ? "没有匹配的视频任务" : "还没有任何视频任务"}
-                description={searchQuery || statusFilter !== "all"
-                  ? "换个关键词或状态试试，真实任务列表会在这里即时刷新。"
-                  : "提交第一条真实视频任务后，这里会开始展示进度、状态和输出结果。"}
-                actionLabel={searchQuery || statusFilter !== "all" ? "清空筛选" : "创建第一条视频"}
-                onAction={() => {
-                  if (searchQuery || statusFilter !== "all") {
-                    setSearchQuery("");
-                    setStatusFilter("all");
-                    return;
-                  }
+              comingSoon ? (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title="视频库即将上线"
+                  description="当前环境未开放视频列表接口，后端准备好后这里会直接展示真实任务和状态。"
+                  actionLabel="重新加载"
+                  onAction={() => {
+                    void loadVideos();
+                  }}
+                />
+              ) : (
+                <WarmEmptyState
+                  icon={Sparkles}
+                  title={searchQuery || statusFilter !== "all" ? "没有匹配的视频任务" : "还没有任何视频任务"}
+                  description={searchQuery || statusFilter !== "all"
+                    ? "换个关键词或状态试试，真实任务列表会在这里即时刷新。"
+                    : "提交第一条真实视频任务后，这里会开始展示进度、状态和输出结果。"}
+                  actionLabel={searchQuery || statusFilter !== "all" ? "清空筛选" : "创建第一条视频"}
+                  onAction={() => {
+                    if (searchQuery || statusFilter !== "all") {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                      return;
+                    }
 
-                  window.location.href = "/dashboard/videos/create";
-                }}
-              />
+                    window.location.href = "/dashboard/videos/create";
+                  }}
+                />
+              )
             }
           >
             <div className="hidden overflow-hidden rounded-2xl border border-border/70 md:block">
