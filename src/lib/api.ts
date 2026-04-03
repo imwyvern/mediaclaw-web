@@ -1,6 +1,5 @@
 import axios, {
   type AxiosError,
-  type AxiosInstance,
   type AxiosRequestConfig,
   type AxiosResponse,
   type Method,
@@ -155,6 +154,83 @@ export interface Brand {
   orgId?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface CalendarTask {
+  id: string;
+  title: string;
+  brand: string;
+  status: VideoLifecycleStatus;
+  rawStatus: string;
+  scheduledAt: string;
+  detailId: string;
+  outputVideoUrl?: string;
+}
+
+export interface AdminClientRecord {
+  id: string;
+  name: string;
+  plan: string;
+  status: string;
+  videoCount: number;
+  memberCount: number;
+  joinedAt?: string;
+}
+
+export interface AdminHealthService {
+  id: string;
+  name: string;
+  status: string;
+  message?: string;
+  latencyMs?: number;
+}
+
+export interface AdminHealthStatus {
+  overallStatus: string;
+  availability: number;
+  queueDepth: number;
+  storageUsage: number;
+  checkedAt?: string;
+  services: AdminHealthService[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp?: string;
+  level: string;
+  action: string;
+  actor: string;
+  description: string;
+  target?: string;
+}
+
+export interface CampaignRecord {
+  id: string;
+  name: string;
+  brand: string;
+  brandId?: string;
+  status: string;
+  progress: number;
+  totalVideos: number;
+  completed: number;
+  startDate?: string;
+  endDate?: string;
+  platforms: string[];
+  description?: string;
+  objective?: string;
+  raw?: unknown;
+}
+
+export interface BillingInvoiceRecord {
+  id: string;
+  number: string;
+  status: string;
+  amount: number;
+  currency: string;
+  issuedAt?: string;
+  paidAt?: string;
+  dueAt?: string;
+  downloadUrl?: string;
 }
 
 export interface EnterpriseRegisterData {
@@ -519,6 +595,19 @@ export function readApiErrorMessage(
   return fallback;
 }
 
+export function getApiStatusCode(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const status = error.response?.status;
+  return typeof status === "number" ? status : null;
+}
+
+export function isApiNotFoundError(error: unknown) {
+  return getApiStatusCode(error) === 404;
+}
+
 function showApiErrorToast(error: unknown) {
   toast.error("请求失败", {
     description: readApiErrorMessage(error),
@@ -668,7 +757,7 @@ async function requestData<T>(
   }
 }
 
-async function request<T = any>(
+async function request<T = unknown>(
   candidate: RequestCandidate,
   options?: RequestOptions,
 ): Promise<ApiResult<T>> {
@@ -719,7 +808,7 @@ async function requestWithFallbackData<T>(
   throw (lastError instanceof Error ? lastError : new Error("Request failed"));
 }
 
-async function requestWithFallback<T = any>(
+async function requestWithFallback<T = unknown>(
   candidates: RequestCandidate[],
   options?: RequestOptions,
 ): Promise<ApiResult<T>> {
@@ -732,6 +821,17 @@ function stringValue(value: unknown, fallback = "") {
 
 function stringOrUndefined(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    const next = stringOrUndefined(value);
+    if (next) {
+      return next;
+    }
+  }
+
+  return undefined;
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -893,6 +993,191 @@ function normalizeBrand(raw: unknown): Brand {
     orgId: stringOrUndefined(record.orgId),
     createdAt: stringOrUndefined(record.createdAt),
     updatedAt: stringOrUndefined(record.updatedAt),
+  };
+}
+
+function normalizeCalendarTask(raw: unknown): CalendarTask {
+  const record = objectValue(raw) || {};
+  const rawStatus = stringValue(
+    record.status,
+    stringValue(record.publishStatus, stringValue(record.taskStatus, "scheduled")),
+  );
+  const scheduledAt =
+    firstString(
+      record.scheduledAt,
+      record.publishAt,
+      record.publishedAt,
+      record.plannedAt,
+      record.executeAt,
+      record.createdAt,
+      record.updatedAt,
+    ) || new Date().toISOString();
+
+  return {
+    id: extractId(record, "calendar"),
+    title: inferVideoTitle(record),
+    brand: inferVideoBrand(record),
+    status: normalizeVideoStatus(rawStatus),
+    rawStatus,
+    scheduledAt,
+    detailId:
+      firstString(record.videoId, record.taskId, record.id, record._id) ||
+      extractId(record, "calendar"),
+    outputVideoUrl: firstString(record.outputVideoUrl, record.videoUrl),
+  };
+}
+
+function normalizeAdminClient(raw: unknown): AdminClientRecord {
+  const record = objectValue(raw) || {};
+  return {
+    id: extractId(record, "client"),
+    name: stringValue(
+      record.name,
+      stringValue(record.orgName, stringValue(record.brandName, "未命名客户")),
+    ),
+    plan: stringValue(
+      record.plan,
+      stringValue(record.planName, stringValue(record.subscriptionTier, "未配置套餐")),
+    ),
+    status: stringValue(
+      record.status,
+      stringValue(record.subscriptionStatus, stringValue(record.accountStatus, "unknown")),
+    ),
+    videoCount: numberValue(
+      record.videoCount ?? record.videos ?? record.contentCount ?? record.generatedVideos,
+    ),
+    memberCount: numberValue(record.memberCount ?? record.members ?? record.userCount),
+    joinedAt: firstString(record.joinedAt, record.createdAt, record.startedAt),
+  };
+}
+
+function normalizeAdminHealthService(raw: unknown): AdminHealthService {
+  const record = objectValue(raw) || {};
+  return {
+    id: extractId(record, "service"),
+    name: stringValue(record.name, stringValue(record.service, "未命名服务")),
+    status: stringValue(record.status, "unknown"),
+    message: firstString(record.message, record.detail, record.description),
+    latencyMs:
+      typeof record.latencyMs === "number" || typeof record.latency === "number"
+        ? numberValue(record.latencyMs ?? record.latency)
+        : undefined,
+  };
+}
+
+function normalizeAdminHealthStatus(raw: unknown): AdminHealthStatus {
+  const record = objectValue(raw) || {};
+  const metrics = objectValue(record.metrics) || {};
+  const queue = objectValue(record.queue) || {};
+  const storage = objectValue(record.storage) || {};
+  const services =
+    Array.isArray(record.services)
+      ? record.services.map((item) => normalizeAdminHealthService(item))
+      : Array.isArray(record.checks)
+        ? record.checks.map((item) => normalizeAdminHealthService(item))
+        : [];
+
+  return {
+    overallStatus: stringValue(record.status, stringValue(record.overallStatus, "unknown")),
+    availability: normalizePercentNumber(
+      record.availability ??
+        record.uptime ??
+        record.uptimeRatio ??
+        metrics.availability ??
+        metrics.uptime,
+    ),
+    queueDepth: numberValue(record.queueDepth ?? metrics.queueDepth ?? queue.pending),
+    storageUsage: normalizePercentNumber(
+      record.storageUsage ?? metrics.storageUsage ?? storage.usage ?? storage.utilization,
+    ),
+    checkedAt: firstString(record.checkedAt, record.updatedAt, record.timestamp),
+    services,
+  };
+}
+
+function normalizeAuditLog(raw: unknown): AuditLogEntry {
+  const record = objectValue(raw) || {};
+  const actor =
+    firstString(record.actorName, record.actor, record.userName, record.userEmail, record.userId) ||
+    "系统";
+  const action = stringValue(
+    record.action,
+    stringValue(record.event, stringValue(record.type, "unknown")),
+  );
+
+  return {
+    id: extractId(record, "audit"),
+    timestamp: firstString(record.timestamp, record.createdAt, record.occurredAt),
+    level: stringValue(record.level, stringValue(record.severity, "info")).toUpperCase(),
+    action,
+    actor,
+    description:
+      firstString(
+        record.description,
+        record.message,
+        record.summary,
+        record.detail,
+      ) || `${actor} 执行了 ${action}`,
+    target: firstString(record.target, record.targetName, record.resource, record.resourceId),
+  };
+}
+
+function normalizeCampaign(raw: unknown): CampaignRecord {
+  const record = objectValue(raw) || {};
+  const totalVideos = numberValue(record.totalVideos ?? record.videoCount ?? record.targetVideos);
+  const completed = numberValue(
+    record.completed ?? record.completedVideos ?? record.generatedVideos,
+  );
+  const progress = Math.max(
+    0,
+    Math.min(
+      100,
+      numberValue(
+        record.progress,
+        totalVideos > 0 ? (completed / totalVideos) * 100 : 0,
+      ),
+    ),
+  );
+
+  return {
+    id: extractId(record, "campaign"),
+    name: stringValue(
+      record.name,
+      stringValue(record.title, stringValue(record.campaignName, "未命名活动")),
+    ),
+    brand: stringValue(record.brandName, inferVideoBrand(record)),
+    brandId: firstString(record.brandId, objectValue(record.brand)?.id),
+    status: stringValue(record.status, stringValue(record.stage, "draft")),
+    progress,
+    totalVideos,
+    completed,
+    startDate: firstString(record.startDate, record.startedAt, record.createdAt),
+    endDate: firstString(record.endDate, record.endedAt),
+    platforms:
+      arrayValue<string>(record.platforms).length > 0
+        ? arrayValue<string>(record.platforms)
+        : arrayValue<string>(record.channels),
+    description: firstString(record.description, record.summary),
+    objective: firstString(record.objective, record.goal),
+    raw,
+  };
+}
+
+function normalizeBillingInvoice(raw: unknown): BillingInvoiceRecord {
+  const record = objectValue(raw) || {};
+  return {
+    id: extractId(record, "invoice"),
+    number: stringValue(
+      record.number,
+      stringValue(record.invoiceNumber, stringValue(record.orderId, extractId(record, "invoice"))),
+    ),
+    status: stringValue(record.status, "pending"),
+    amount: numberValue(record.amount ?? record.totalAmount),
+    currency: stringValue(record.currency, "CNY"),
+    issuedAt: firstString(record.issuedAt, record.createdAt),
+    paidAt: firstString(record.paidAt),
+    dueAt: firstString(record.dueAt, record.expiredAt),
+    downloadUrl: firstString(record.downloadUrl, record.invoiceUrl, record.pdfUrl),
   };
 }
 
@@ -1559,11 +1844,19 @@ const analyticsApi = {
       throw error;
     }
   },
+  videoDetail: async (id: string) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: `/v1/analytics/video/${id}` },
+      { url: `/v1/videos/${id}` },
+      { url: `/v1/content/${id}` },
+    ]);
+    return toResult(normalizeVideoDetail(raw));
+  },
 };
-
 const brandsApi = {
   list: async () => {
     const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/brand/list" },
       { url: "/v1/brands" },
       { url: "/v1/brand" },
     ]);
@@ -1583,6 +1876,7 @@ const brandsApi = {
   create: async (data: Record<string, unknown>) => {
     const payload = buildBrandPayload(data);
     const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/brand/create", method: "POST", data: payload },
       { url: "/v1/brands", method: "POST", data: payload },
       { url: "/v1/brand", method: "POST", data: payload },
     ]);
@@ -1591,8 +1885,8 @@ const brandsApi = {
   update: async (id: string, data: Record<string, unknown>) => {
     const payload = buildBrandPayload(data);
     const raw = await requestWithFallbackData<unknown>([
-      { url: `/v1/brands/${id}`, method: "PATCH", data: payload },
       { url: `/v1/brand/${id}`, method: "PATCH", data: payload },
+      { url: `/v1/brands/${id}`, method: "PATCH", data: payload },
     ]);
     return toResult(normalizeBrand(raw));
   },
@@ -1601,10 +1895,19 @@ const brandsApi = {
       { url: `/v1/brands/${id}`, method: "DELETE" },
       { url: `/v1/brand/${id}`, method: "DELETE" },
     ]),
-  uploadAsset: async (id: string, file: File) => {
+  uploadAsset: async (id: string, file: File, assetType = "logo") => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("brandId", id);
+    formData.append("assetType", assetType);
+
     return requestWithFallback([
+      {
+        url: "/v1/asset/upload",
+        method: "POST",
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" },
+      },
       {
         url: `/v1/brands/${id}/assets`,
         method: "PATCH",
@@ -1620,7 +1923,6 @@ const brandsApi = {
     ]);
   },
 };
-
 const accountApi = {
   get: async () => {
     const raw = await requestData<unknown>({ url: "/v1/account" });
@@ -1770,11 +2072,63 @@ const tasksApi = {
   timeline: async (id: string) => videosApi.iterations(id),
 };
 
+const calendarApi = {
+  scheduled: async (params?: { month?: string; status?: string }) => {
+    const query = compactObject({
+      month: params?.month,
+      status: params?.status || "scheduled",
+    });
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/task-mgmt/tasks", params: query },
+      { url: "/v1/tasks", params: query },
+      { url: "/v1/videos", params: query },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeCalendarTask(item)).items);
+  },
+};
+
+const adminApi = {
+  clients: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/client-mgmt/clients" },
+      { url: "/v1/org/clients" },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeAdminClient(item)).items);
+  },
+  health: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/health/status" },
+      { url: "/v1/health" },
+    ]);
+    return toResult(normalizeAdminHealthStatus(raw));
+  },
+  auditLogs: async (params?: { page?: number; limit?: number }) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/audit/logs", params },
+      { url: "/v1/audit", params },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeAuditLog(item)));
+  },
+  members: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/org/members" },
+      { url: "/v1/users" },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeUser(item)).items);
+  },
+};
+
 const billingApi = {
   balance: async () => accountApi.get(),
   orders: async (params?: Record<string, unknown>) => paymentApi.orders(params),
+  invoices: async (params?: Record<string, unknown>) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/billing/invoices", params },
+      { url: "/v1/payment/invoices", params },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeBillingInvoice(item)));
+  },
 };
-
 const settingsApi = {
   apiKeys: {
     list: async () => {
@@ -1921,14 +2275,68 @@ const platformAccountsApi = {
 };
 
 const campaignsApi = {
-  list: () => request({ url: "/v1/campaign" }),
-  get: (id: string) => request({ url: `/v1/campaign/${id}` }),
-  create: (data: Record<string, unknown>) => request({ url: "/v1/campaign", method: "POST", data }),
-  update: (id: string, data: Record<string, unknown>) =>
-    request({ url: `/v1/campaign/${id}`, method: "PATCH", data }),
-  remove: (id: string) => request({ url: `/v1/campaign/${id}`, method: "DELETE" }),
+  list: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/campaign/list" },
+      { url: "/v1/campaign" },
+      { url: "/v1/campaigns" },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeCampaign(item)).items);
+  },
+  get: async (id: string) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: `/v1/campaign/${id}` },
+      { url: `/v1/campaigns/${id}` },
+    ]);
+    return toResult(normalizeCampaign(raw));
+  },
+  create: async (data: Record<string, unknown>) => {
+    const payload = compactObject({
+      name: stringOrUndefined(data.name),
+      brandId: stringOrUndefined(data.brandId),
+      description: stringOrUndefined(data.description),
+      objective: stringOrUndefined(data.objective),
+      startDate: stringOrUndefined(data.startDate),
+      endDate: stringOrUndefined(data.endDate),
+      platforms: Array.isArray(data.platforms) ? data.platforms : undefined,
+      totalVideos: typeof data.totalVideos === "number" ? data.totalVideos : undefined,
+    });
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/campaign/create", method: "POST", data: payload },
+      { url: "/v1/campaign", method: "POST", data: payload },
+    ]);
+    return toResult(normalizeCampaign(raw));
+  },
+  update: async (id: string, data: Record<string, unknown>) => {
+    const payload = compactObject({
+      name: stringOrUndefined(data.name),
+      status: stringOrUndefined(data.status),
+      brandId: stringOrUndefined(data.brandId),
+      description: stringOrUndefined(data.description),
+      objective: stringOrUndefined(data.objective),
+      startDate: stringOrUndefined(data.startDate),
+      endDate: stringOrUndefined(data.endDate),
+      platforms: Array.isArray(data.platforms) ? data.platforms : undefined,
+      totalVideos: typeof data.totalVideos === "number" ? data.totalVideos : undefined,
+    });
+    const candidates = payload.status && Object.keys(payload).length === 1
+      ? [
+          { url: `/v1/campaign/${id}/status`, method: "POST", data: { status: payload.status } },
+          { url: `/v1/campaign/${id}`, method: "PATCH", data: payload },
+        ]
+      : [
+          { url: `/v1/campaign/${id}`, method: "PATCH", data: payload },
+          { url: `/v1/campaigns/${id}`, method: "PATCH", data: payload },
+        ];
+    const raw = await requestWithFallbackData<unknown>(candidates);
+    return toResult(normalizeCampaign(raw));
+  },
+  remove: async (id: string) =>
+    requestWithFallback([
+      { url: `/v1/campaign/${id}`, method: "DELETE" },
+      { url: `/v1/campaigns/${id}`, method: "DELETE" },
+    ]),
 };
-
 const discoveryApi = {
   getPool: (params?: DiscoveryPoolParams) => {
     const query = compactObject({
@@ -1953,6 +2361,19 @@ const discoveryApi = {
       method: "POST",
       data: { contentId, brandId },
     }),
+  remix: (contentId: string, brandId: string) =>
+    requestWithFallback<DiscoveryRemixBrief>([
+      {
+        url: "/v1/discovery/remix",
+        method: "POST",
+        data: { contentId, brandId },
+      },
+      {
+        url: "/v1/discovery/generate-remix-brief",
+        method: "POST",
+        data: { contentId, brandId },
+      },
+    ]),
   markRemixed: (contentId: string, taskId: string) =>
     request({
       url: "/v1/discovery/mark-remixed",
@@ -1960,7 +2381,6 @@ const discoveryApi = {
       data: { contentId, taskId },
     }),
 };
-
 const skillApi = {
   config: (agentId: string) => request({ url: "/v1/skill/config", params: { agentId } }),
   register: (data: { agentId: string; capabilities?: string[] }) =>
@@ -1999,6 +2419,8 @@ export const api = {
   analytics: analyticsApi,
   brands: brandsApi,
   brand: brandsApi,
+  calendar: calendarApi,
+  admin: adminApi,
   account: accountApi,
   billing: billingApi,
   payment: paymentApi,
