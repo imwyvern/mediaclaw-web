@@ -478,6 +478,34 @@ export interface AnalyticsTopVideo {
   completedAt?: string;
 }
 
+export interface DataOverviewActivityPoint {
+  date: string;
+  totalVideos: number;
+  completedVideos: number;
+  totalViews: number;
+}
+
+export interface DataOverviewSummary {
+  totalVideos: number;
+  completedVideos: number;
+  successRate: number;
+  totalViews: number;
+  averageViewsPerVideo: number;
+  engagementRate: number;
+  publishingConsistency: number;
+  trackedVideos: number;
+}
+
+export interface DataOverview {
+  orgId: string;
+  source: string;
+  dashboardTier?: string;
+  windowDays: number;
+  summary: DataOverviewSummary;
+  activity: DataOverviewActivityPoint[];
+  recentVideos: ContentItem[];
+}
+
 export interface ApiKeyRecord {
   id: string;
   name: string;
@@ -1587,19 +1615,59 @@ function normalizeProductionTask(raw: unknown): ProductionTask {
 
 function normalizeAnalyticsOverview(raw: unknown): AnalyticsOverview {
   const record = objectValue(raw) || {};
-  const performance = objectValue(record.performance) || {};
+  const summary = objectValue(record.summary) || {};
+  const performance = objectValue(summary.performance) || objectValue(record.performance) || {};
   return {
-    totalVideos: numberValue(record.totalVideos),
-    creditsUsed: numberValue(record.creditsUsed),
-    successRate: normalizePercentNumber(record.successRate),
-    avgProductionTimeMs: numberValue(record.avgProductionTimeMs),
-    avgProductionTimeMinutes: numberValue(record.avgProductionTimeMinutes),
+    totalVideos: numberValue(record.totalVideos ?? summary.totalVideos),
+    creditsUsed: numberValue(record.creditsUsed ?? summary.creditsUsed),
+    successRate: normalizePercentNumber(record.successRate ?? summary.successRate),
+    avgProductionTimeMs: numberValue(record.avgProductionTimeMs ?? summary.avgProductionTimeMs),
+    avgProductionTimeMinutes: numberValue(
+      record.avgProductionTimeMinutes ?? summary.avgProductionTimeMinutes,
+    ),
     performance: {
-      views: numberValue(performance.views),
-      likes: numberValue(performance.likes),
-      comments: numberValue(performance.comments),
+      views: numberValue(
+        performance.views ?? objectValue(record.last30Days)?.totalViews ?? objectValue(record.requestedWindow)?.totalViews,
+      ),
+      likes: numberValue(
+        performance.likes ?? objectValue(record.last30Days)?.totalLikes ?? objectValue(record.requestedWindow)?.totalLikes,
+      ),
+      comments: numberValue(
+        performance.comments ?? objectValue(record.last30Days)?.totalComments ?? objectValue(record.requestedWindow)?.totalComments,
+      ),
     },
     topVideos: arrayValue(record.topVideos).map((item) => normalizeAnalyticsTopVideo(item)),
+  };
+}
+
+function normalizeDataOverview(raw: unknown): DataOverview {
+  const record = objectValue(raw) || {};
+  const summary = objectValue(record.summary) || {};
+  return {
+    orgId: stringValue(record.orgId, ""),
+    source: stringValue(record.source, "unknown"),
+    dashboardTier: stringOrUndefined(record.dashboardTier),
+    windowDays: numberValue(record.windowDays, 30),
+    summary: {
+      totalVideos: numberValue(summary.totalVideos),
+      completedVideos: numberValue(summary.completedVideos),
+      successRate: normalizePercentNumber(summary.successRate),
+      totalViews: numberValue(summary.totalViews),
+      averageViewsPerVideo: numberValue(summary.averageViewsPerVideo),
+      engagementRate: normalizePercentNumber(summary.engagementRate),
+      publishingConsistency: normalizePercentNumber(summary.publishingConsistency),
+      trackedVideos: numberValue(summary.trackedVideos),
+    },
+    activity: arrayValue(record.activity).map((item) => {
+      const point = objectValue(item) || {};
+      return {
+        date: stringValue(point.date),
+        totalVideos: numberValue(point.totalVideos),
+        completedVideos: numberValue(point.completedVideos),
+        totalViews: numberValue(point.totalViews),
+      };
+    }),
+    recentVideos: arrayValue(record.recentVideos).map((item) => normalizeContentItem(item)),
   };
 }
 
@@ -1853,6 +1921,14 @@ const analyticsApi = {
     return toResult(normalizeVideoDetail(raw));
   },
 };
+
+const dataApi = {
+  overview: async () => {
+    const raw = await requestData<unknown>({ url: "/v1/data/overview" });
+    return toResult(normalizeDataOverview(raw));
+  },
+};
+
 const brandsApi = {
   list: async () => {
     const raw = await requestWithFallbackData<unknown>([
@@ -2417,6 +2493,7 @@ const authApi = {
 export const api = {
   content: contentApi,
   analytics: analyticsApi,
+  data: dataApi,
   brands: brandsApi,
   brand: brandsApi,
   calendar: calendarApi,
