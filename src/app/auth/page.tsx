@@ -73,10 +73,11 @@ export default function AuthPage() {
     try {
       const sendRes = await api.auth.sendCode(phone);
       startTimer();
-      if (sendRes.data?.code) {
-        setMockCode(sendRes.data.code);
-        setCode(sendRes.data.code);
-        toast.success(`[测试模式] 验证码已自动填入: ${sendRes.data.code}`);
+      if ((sendRes.data as Record<string, unknown>)?.code) {
+        const testCode = (sendRes.data as Record<string, unknown>).code as string;
+        setMockCode(testCode);
+        setCode(testCode);
+        toast.success(`[测试模式] 验证码已自动填入: ${testCode}`);
       } else {
         toast.success(`验证码已发送至 ${phone}`);
       }
@@ -126,10 +127,11 @@ export default function AuthPage() {
     try {
       const sendRes = await api.auth.sendCode(registerForm.adminPhone);
       startRegisterTimer();
-      if (sendRes.data?.code) {
-        setRegisterMockCode(sendRes.data.code);
-        updateRegisterForm("code", sendRes.data.code);
-        toast.success(`[测试模式] 验证码已自动填入: ${sendRes.data.code}`);
+      if ((sendRes.data as Record<string, unknown>)?.code) {
+        const testCode = (sendRes.data as Record<string, unknown>).code as string;
+        setRegisterMockCode(testCode);
+        updateRegisterForm("code", testCode);
+        toast.success(`[测试模式] 验证码已自动填入: ${testCode}`);
       } else {
         toast.success(`验证码已发送至 ${registerForm.adminPhone}`);
       }

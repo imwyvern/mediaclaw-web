@@ -2319,7 +2319,7 @@ const campaignsApi = {
       platforms: Array.isArray(data.platforms) ? data.platforms : undefined,
       totalVideos: typeof data.totalVideos === "number" ? data.totalVideos : undefined,
     });
-    const candidates = payload.status && Object.keys(payload).length === 1
+    const candidates: RequestCandidate[] = payload.status && Object.keys(payload).length === 1
       ? [
           { url: `/v1/campaign/${id}/status`, method: "POST", data: { status: payload.status } },
           { url: `/v1/campaign/${id}`, method: "PATCH", data: payload },

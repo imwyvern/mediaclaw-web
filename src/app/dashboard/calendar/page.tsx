@@ -40,7 +40,7 @@ import {
 } from "@/lib/api";
 import { type VideoLifecycleStatus } from "@/lib/video-status";
 
-const STATUS_STYLES: Record<VideoLifecycleStatus, { dot: string; chip: string; label: string }> = {
+const STATUS_STYLES: Record<string, { dot: string; chip: string; label: string }> = {
   draft: {
     dot: "bg-slate-400",
     chip: "border-slate-400/20 bg-slate-400/10 text-slate-200",

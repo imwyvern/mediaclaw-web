@@ -545,7 +545,7 @@ export default function CampaignsPage() {
                   <Select
                     value={form.brandId}
                     onValueChange={(value) => {
-                      setForm((current) => ({ ...current, brandId: value }));
+                      setForm((current) => ({ ...current, brandId: value ?? "" }));
                     }}
                   >
                     <SelectTrigger className="w-full border-white/10 bg-white/[0.03]">
