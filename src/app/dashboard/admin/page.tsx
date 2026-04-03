@@ -1,195 +1,748 @@
 "use client";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import {
+  Activity,
+  Building2,
+  Database,
+  FileClock,
+  RefreshCw,
+  Server,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
+
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { MetadataUpdater } from "@/components/metadata-updater";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Activity, ShieldAlert, Users, Server, Settings2, CheckCircle2, AlertCircle, Database, ListChecks } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { EmptyState } from "@/components/empty-state";
-import { MetadataUpdater } from "@/components/metadata-updater";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  api,
+  isApiNotFoundError,
+  readApiErrorMessage,
+  type AdminClientRecord,
+  type AdminHealthStatus,
+  type AuditLogEntry,
+  type PaginatedResponse,
+  type User,
+} from "@/lib/api";
+
+const EMPTY_AUDIT_LOGS: PaginatedResponse<AuditLogEntry> = {
+  items: [],
+  total: 0,
+  page: 1,
+  limit: 20,
+};
+
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "未记录";
+  }
+
+  try {
+    return format(parseISO(value), "yyyy-MM-dd HH:mm");
+  } catch {
+    return value;
+  }
+}
+
+function formatPercent(value: number) {
+  const digits = Number.isInteger(value) ? 0 : 1;
+  return `${value.toFixed(digits)}%`;
+}
+
+function getStatusBadgeClass(status: string) {
+  const normalized = status.trim().toLowerCase();
+
+  if (["healthy", "operational", "ok", "up", "online", "active", "paid"].includes(normalized)) {
+    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-100";
+  }
+
+  if (["warning", "degraded", "pending", "scheduled", "trial"].includes(normalized)) {
+    return "border-amber-500/20 bg-amber-500/10 text-amber-100";
+  }
+
+  if (["failed", "down", "offline", "error", "suspended", "inactive"].includes(normalized)) {
+    return "border-rose-500/20 bg-rose-500/10 text-rose-100";
+  }
+
+  return "border-slate-500/20 bg-slate-500/10 text-slate-200";
+}
+
+function MetricCardSkeleton() {
+  return (
+    <Card className="border-white/10 bg-black/20">
+      <CardHeader className="space-y-3 pb-3">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-20" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-3 w-28" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function TableSkeleton({ columns = 5, rows = 5 }: { columns?: number; rows?: number }) {
+  return (
+    <Card className="border-white/10 bg-black/20">
+      <CardHeader>
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-4 w-72" />
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {Array.from({ length: rows }).map((_, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="grid gap-3"
+              style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+            >
+              {Array.from({ length: columns }).map((__, columnIndex) => (
+                <Skeleton key={columnIndex} className="h-10 w-full" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminPage() {
+  const [clients, setClients] = useState<AdminClientRecord[]>([]);
+  const [health, setHealth] = useState<AdminHealthStatus | null>(null);
+  const [auditLogs, setAuditLogs] = useState<PaginatedResponse<AuditLogEntry>>(EMPTY_AUDIT_LOGS);
+  const [members, setMembers] = useState<User[]>([]);
+
+  const [pageLoading, setPageLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [clientsError, setClientsError] = useState<string | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
+
+  const [clientsComingSoon, setClientsComingSoon] = useState(false);
+  const [healthComingSoon, setHealthComingSoon] = useState(false);
+  const [auditComingSoon, setAuditComingSoon] = useState(false);
+  const [membersComingSoon, setMembersComingSoon] = useState(false);
+
+  const loadAdminData = async (options?: { silent?: boolean }) => {
+    if (options?.silent) {
+      setRefreshing(true);
+    } else {
+      setPageLoading(true);
+    }
+
+    setClientsError(null);
+    setHealthError(null);
+    setAuditError(null);
+    setMembersError(null);
+    setClientsComingSoon(false);
+    setHealthComingSoon(false);
+    setAuditComingSoon(false);
+    setMembersComingSoon(false);
+
+    const [clientsResult, healthResult, auditResult, membersResult] = await Promise.allSettled([
+      api.admin.clients(),
+      api.admin.health(),
+      api.admin.auditLogs({ page: 1, limit: 20 }),
+      api.admin.members(),
+    ]);
+
+    if (clientsResult.status === "fulfilled") {
+      setClients(clientsResult.value.data);
+    } else if (isApiNotFoundError(clientsResult.reason)) {
+      setClients([]);
+      setClientsComingSoon(true);
+    } else {
+      setClients([]);
+      setClientsError(
+        readApiErrorMessage(clientsResult.reason, "客户列表加载失败，请稍后重试。"),
+      );
+    }
+
+    if (healthResult.status === "fulfilled") {
+      setHealth(healthResult.value.data);
+    } else if (isApiNotFoundError(healthResult.reason)) {
+      setHealth(null);
+      setHealthComingSoon(true);
+    } else {
+      setHealth(null);
+      setHealthError(
+        readApiErrorMessage(healthResult.reason, "系统健康状态加载失败，请稍后重试。"),
+      );
+    }
+
+    if (auditResult.status === "fulfilled") {
+      setAuditLogs(auditResult.value.data);
+    } else if (isApiNotFoundError(auditResult.reason)) {
+      setAuditLogs(EMPTY_AUDIT_LOGS);
+      setAuditComingSoon(true);
+    } else {
+      setAuditLogs(EMPTY_AUDIT_LOGS);
+      setAuditError(
+        readApiErrorMessage(auditResult.reason, "审计日志加载失败，请稍后重试。"),
+      );
+    }
+
+    if (membersResult.status === "fulfilled") {
+      setMembers(membersResult.value.data);
+    } else if (isApiNotFoundError(membersResult.reason)) {
+      setMembers([]);
+      setMembersComingSoon(true);
+    } else {
+      setMembers([]);
+      setMembersError(
+        readApiErrorMessage(membersResult.reason, "成员列表加载失败，请稍后重试。"),
+      );
+    }
+
+    setPageLoading(false);
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAdminData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const totalVideos = useMemo(() => {
+    return clients.reduce((sum, client) => sum + client.videoCount, 0);
+  }, [clients]);
+
+  const totalMembers = useMemo(() => {
+    return clients.reduce((sum, client) => sum + client.memberCount, 0);
+  }, [clients]);
+
+  const healthyServices = useMemo(() => {
+    if (!health) {
+      return 0;
+    }
+
+    return health.services.filter((service) => {
+      const normalized = service.status.trim().toLowerCase();
+      return ["healthy", "operational", "ok", "up", "online"].includes(normalized);
+    }).length;
+  }, [health]);
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pb-8">
       <MetadataUpdater title="管理后台" />
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin Panel</h1>
-          <p className="text-muted-foreground flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-primary" /> 
-            Restricted access. All actions are logged.
+
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">管理后台</h1>
+          <p className="flex items-center gap-2 text-sm text-slate-300/80 sm:text-base">
+            <ShieldAlert className="h-4 w-4 text-sky-300" />
+            当前面板直接读取真实的客户、健康度、审计和组织成员数据，不再展示占位数据。
           </p>
         </div>
+
+        <Button
+          variant="outline"
+          className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
+          onClick={() => {
+            void loadAdminData({ silent: true });
+          }}
+          disabled={pageLoading || refreshing}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          刷新后台数据
+        </Button>
       </div>
 
-      <Tabs defaultValue="clients" className="space-y-6">
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="clients" className="gap-2"><Users className="w-4 h-4" /> Clients</TabsTrigger>
-          <TabsTrigger value="system" className="gap-2"><Activity className="w-4 h-4" /> System</TabsTrigger>
-          <TabsTrigger value="config" className="gap-2"><Settings2 className="w-4 h-4" /> Config</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="clients" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organizations</CardTitle>
-              <CardDescription>Manage client accounts and subscription tiers.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Organization</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Video Count</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[
-                    { name: "Acme Corp", plan: "Enterprise", videos: 1240, status: "Active", joined: "2025-10-24" },
-                    { name: "Global Inc", plan: "Pro", videos: 562, status: "Active", joined: "2025-11-12" },
-                    { name: "Alpha Startups", plan: "Starter", videos: 45, status: "Suspended", joined: "2026-01-05" },
-                  ].map((org) => (
-                    <TableRow key={org.name}>
-                      <TableCell className="font-medium">{org.name}</TableCell>
-                      <TableCell><Badge variant="outline">{org.plan}</Badge></TableCell>
-                      <TableCell>{org.videos}</TableCell>
-                      <TableCell>
-                        <Badge className={org.status === "Active" ? "bg-emerald-500/10 text-emerald-500" : "bg-destructive/10 text-destructive"}>
-                          {org.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{org.joined}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">Edit</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="system" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">API Health</CardTitle>
-                < Server className="h-4 w-4 text-emerald-500" />
+      <div className="grid gap-4 lg:grid-cols-3">
+        {pageLoading ? (
+          Array.from({ length: 3 }).map((_, index) => <MetricCardSkeleton key={index} />)
+        ) : (
+          <>
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-sm text-slate-300">客户组织</CardTitle>
+                  <CardDescription className="text-slate-400">已接入的企业与视频规模</CardDescription>
+                </div>
+                <Building2 className="h-4 w-4 text-sky-300" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">99.98%</div>
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Operational
+                <div className="text-3xl font-semibold text-white">{clients.length}</div>
+                <p className="mt-2 text-sm text-slate-400">
+                  累计 {totalVideos} 条视频，覆盖 {totalMembers} 名成员
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Worker Queue</CardTitle>
-                <Activity className="h-4 w-4 text-blue-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">142</div>
-                <p className="text-xs text-muted-foreground mt-1">Pending render tasks</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
-                <Database className="h-4 w-4 text-orange-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">78.4%</div>
-                <Progress value={78.4} className="h-2 mt-2" />
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>System Logs</CardTitle>
-              <CardDescription>Real-time audit trail of system events.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 font-mono text-xs">
-                {[
-                  { time: "2026-03-29 10:45:12", event: "Worker #04 started job mc_8f22", level: "INFO" },
-                  { time: "2026-03-29 10:44:55", event: "User login: admin@acme.com", level: "AUTH" },
-                  { time: "2026-03-29 10:42:01", event: "Storage threshold exceeded on node-01", level: "WARN" },
-                ].length > 0 ? [
-                  { time: "2026-03-29 10:45:12", event: "Worker #04 started job mc_8f22", level: "INFO" },
-                  { time: "2026-03-29 10:44:55", event: "User login: admin@acme.com", level: "AUTH" },
-                  { time: "2026-03-29 10:42:01", event: "Storage threshold exceeded on node-01", level: "WARN" },
-                ].map((log, i) => (
-                  <div key={i} className="flex gap-4 border-l-2 pl-4 border-muted">
-                    <span className="text-muted-foreground">{log.time}</span>
-                    <span className={log.level === "WARN" ? "text-orange-500 font-bold" : "text-blue-500"}>[{log.level}]</span>
-                    <span>{log.event}</span>
-                  </div>
-                )) : (
-                  <EmptyState 
-                    icon={ListChecks}
-                    title="No system logs"
-                    description="System audit logs will appear here as events occur."
-                    className="border-none py-12"
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-sm text-slate-300">服务健康度</CardTitle>
+                  <CardDescription className="text-slate-400">来自 health/status 的实时状态</CardDescription>
+                </div>
+                <Server className="h-4 w-4 text-emerald-300" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-semibold text-white">
+                  {health ? formatPercent(health.availability) : "--"}
+                </div>
+                <p className="mt-2 text-sm text-slate-400">
+                  {health ? `${healthyServices}/${health.services.length} 个服务正常` : "等待系统数据"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-sm text-slate-300">审计记录</CardTitle>
+                  <CardDescription className="text-slate-400">最近一页行为日志与成员变更</CardDescription>
+                </div>
+                <FileClock className="h-4 w-4 text-amber-300" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-semibold text-white">{auditLogs.total}</div>
+                <p className="mt-2 text-sm text-slate-400">
+                  当前展示第 {auditLogs.page} 页，成员总数 {members.length}
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
+      <Tabs defaultValue="clients" className="space-y-6">
+        <TabsList className="border border-white/10 bg-white/[0.04]">
+          <TabsTrigger value="clients" className="gap-2">
+            <Users className="h-4 w-4" />
+            客户管理
+          </TabsTrigger>
+          <TabsTrigger value="system" className="gap-2">
+            <Activity className="h-4 w-4" />
+            系统状态
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="gap-2">
+            <FileClock className="h-4 w-4" />
+            审计日志
+          </TabsTrigger>
+          <TabsTrigger value="members" className="gap-2">
+            <Users className="h-4 w-4" />
+            用户列表
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="clients" className="space-y-6">
+          {pageLoading ? (
+            <TableSkeleton columns={6} rows={5} />
+          ) : clientsError ? (
+            <ErrorState
+              title="客户列表加载失败"
+              description={clientsError}
+              onRetry={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : clientsComingSoon ? (
+            <EmptyState
+              icon={Building2}
+              title="客户管理即将上线"
+              description="当前环境还没有开放 client-mgmt 接口，后端准备好后这里会直接展示真实组织列表。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : clients.length === 0 ? (
+            <EmptyState
+              icon={Building2}
+              title="暂无客户组织"
+              description="当新的客户组织开通后，这里会显示套餐、成员数和视频规模。"
+              actionLabel="刷新列表"
+              onAction={() => {
+                void loadAdminData({ silent: true });
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : (
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader>
+                <CardTitle className="text-white">客户组织</CardTitle>
+                <CardDescription className="text-slate-400">
+                  来自 `/client-mgmt/clients` 的真实组织数据。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead>组织</TableHead>
+                      <TableHead>套餐</TableHead>
+                      <TableHead>成员数</TableHead>
+                      <TableHead>视频数</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>开通时间</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clients.map((client) => (
+                      <TableRow key={client.id} className="border-white/10">
+                        <TableCell className="font-medium text-white">{client.name}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className="border-white/10 bg-white/[0.03] text-slate-100"
+                          >
+                            {client.plan}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{client.memberCount}</TableCell>
+                        <TableCell>{client.videoCount}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={getStatusBadgeClass(client.status)}>
+                            {client.status || "unknown"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-400">
+                          {formatDateTime(client.joinedAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        <TabsContent value="config" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Global Configuration</CardTitle>
-              <CardDescription>System-wide settings affecting all organizations.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="maxJobs">Max Concurrent Jobs</Label>
-                  <Input id="maxJobs" type="number" defaultValue={50} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="defCredits">Default New Org Credits</Label>
-                  <Input id="defCredits" type="number" defaultValue={100} />
-                </div>
+        <TabsContent value="system" className="space-y-6">
+          {pageLoading ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <MetricCardSkeleton key={index} />
+                ))}
               </div>
-              <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Maintenance Mode</div>
-                    <div className="text-sm text-muted-foreground">Disable all public API access and frontends.</div>
-                  </div>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Automatic Backups</div>
-                    <div className="text-sm text-muted-foreground">Snapshot database and storage daily.</div>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
+              <TableSkeleton columns={4} rows={4} />
+            </>
+          ) : healthError ? (
+            <ErrorState
+              title="系统状态加载失败"
+              description={healthError}
+              onRetry={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : healthComingSoon ? (
+            <EmptyState
+              icon={Activity}
+              title="系统健康面板即将上线"
+              description="health/status 接口在当前环境尚未开放，服务连通后会在这里展示真实健康度。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : !health ? (
+            <EmptyState
+              icon={Activity}
+              title="暂无系统状态数据"
+              description="当前没有可展示的健康指标，请稍后刷新。"
+              actionLabel="刷新状态"
+              onAction={() => {
+                void loadAdminData({ silent: true });
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card className="border-white/10 bg-black/20">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm text-slate-300">整体状态</CardTitle>
+                    <Server className="h-4 w-4 text-emerald-300" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Badge variant="outline" className={getStatusBadgeClass(health.overallStatus)}>
+                        {health.overallStatus || "unknown"}
+                      </Badge>
+                      <span className="text-xs text-slate-400">
+                        更新时间 {formatDateTime(health.checkedAt)}
+                      </span>
+                    </div>
+                    <div className="text-3xl font-semibold text-white">
+                      {formatPercent(health.availability)}
+                    </div>
+                    <Progress
+                      value={Math.max(0, Math.min(100, health.availability))}
+                      className="mt-3 h-2"
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-black/20">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm text-slate-300">任务队列</CardTitle>
+                    <Activity className="h-4 w-4 text-sky-300" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-semibold text-white">{health.queueDepth}</div>
+                    <p className="mt-2 text-sm text-slate-400">待处理渲染与发布任务深度</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-black/20">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm text-slate-300">存储占用</CardTitle>
+                    <Database className="h-4 w-4 text-amber-300" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-semibold text-white">
+                      {formatPercent(health.storageUsage)}
+                    </div>
+                    <Progress
+                      value={Math.max(0, Math.min(100, health.storageUsage))}
+                      className="mt-3 h-2"
+                    />
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-            <CardFooter className="border-t px-6 py-4 flex justify-between">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Changes take effect immediately across all nodes.
-              </p>
-              <Button>Save Config</Button>
-            </CardFooter>
-          </Card>
+
+              {health.services.length === 0 ? (
+                <EmptyState
+                  icon={Server}
+                  title="暂无服务检查项"
+                  description="health 接口已返回，但没有服务级别的检查明细。"
+                  className="border-white/10 bg-black/20"
+                />
+              ) : (
+                <Card className="border-white/10 bg-black/20">
+                  <CardHeader>
+                    <CardTitle className="text-white">服务明细</CardTitle>
+                    <CardDescription className="text-slate-400">
+                      逐项展示 API、队列和存储依赖的健康结果。
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-white/10 hover:bg-transparent">
+                          <TableHead>服务</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>延迟</TableHead>
+                          <TableHead>说明</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {health.services.map((service) => (
+                          <TableRow key={service.id} className="border-white/10">
+                            <TableCell className="font-medium text-white">{service.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={getStatusBadgeClass(service.status)}>
+                                {service.status || "unknown"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {typeof service.latencyMs === "number"
+                                ? `${service.latencyMs} ms`
+                                : "--"}
+                            </TableCell>
+                            <TableCell className="text-slate-400">
+                              {service.message || "无额外说明"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="audit" className="space-y-6">
+          {pageLoading ? (
+            <TableSkeleton columns={5} rows={6} />
+          ) : auditError ? (
+            <ErrorState
+              title="审计日志加载失败"
+              description={auditError}
+              onRetry={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : auditComingSoon ? (
+            <EmptyState
+              icon={FileClock}
+              title="审计日志即将上线"
+              description="当前环境还没有开放 audit/logs 接口，等后端接入后会直接显示真实操作轨迹。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : auditLogs.items.length === 0 ? (
+            <EmptyState
+              icon={FileClock}
+              title="暂无审计日志"
+              description="当后台产生登录、配置修改或组织变更后，这里会自动出现对应记录。"
+              actionLabel="刷新日志"
+              onAction={() => {
+                void loadAdminData({ silent: true });
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : (
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader>
+                <CardTitle className="text-white">审计日志</CardTitle>
+                <CardDescription className="text-slate-400">
+                  当前展示最近 {auditLogs.items.length} 条记录，共 {auditLogs.total} 条。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead>时间</TableHead>
+                      <TableHead>级别</TableHead>
+                      <TableHead>执行者</TableHead>
+                      <TableHead>动作</TableHead>
+                      <TableHead>说明</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLogs.items.map((log) => (
+                      <TableRow key={log.id} className="border-white/10 align-top">
+                        <TableCell className="whitespace-nowrap text-slate-400">
+                          {formatDateTime(log.timestamp)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={getStatusBadgeClass(log.level)}>
+                            {log.level}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-white">{log.actor}</TableCell>
+                        <TableCell>{log.action}</TableCell>
+                        <TableCell className="text-slate-400">
+                          {log.description}
+                          {log.target ? (
+                            <div className="mt-1 text-xs text-slate-500">目标：{log.target}</div>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="members" className="space-y-6">
+          {pageLoading ? (
+            <TableSkeleton columns={5} rows={6} />
+          ) : membersError ? (
+            <ErrorState
+              title="成员列表加载失败"
+              description={membersError}
+              onRetry={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : membersComingSoon ? (
+            <EmptyState
+              icon={Users}
+              title="用户列表即将上线"
+              description="组织成员接口在当前环境未开放，准备好后这里会直接展示真实成员数据。"
+              actionLabel="重新加载"
+              onAction={() => {
+                void loadAdminData();
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : members.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="暂无组织成员"
+              description="还没有成员加入当前组织，后续邀请成功后会展示在这里。"
+              actionLabel="刷新成员"
+              onAction={() => {
+                void loadAdminData({ silent: true });
+              }}
+              className="border-white/10 bg-black/20"
+            />
+          ) : (
+            <Card className="border-white/10 bg-black/20">
+              <CardHeader>
+                <CardTitle className="text-white">组织成员</CardTitle>
+                <CardDescription className="text-slate-400">
+                  来自 `/org/members` 的真实成员列表。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead>姓名</TableHead>
+                      <TableHead>手机号</TableHead>
+                      <TableHead>邮箱</TableHead>
+                      <TableHead>角色</TableHead>
+                      <TableHead>最近登录</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((member) => (
+                      <TableRow key={member.id} className="border-white/10">
+                        <TableCell className="font-medium text-white">{member.name}</TableCell>
+                        <TableCell>{member.phone || "未填写"}</TableCell>
+                        <TableCell className="text-slate-400">{member.email || "未填写"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={getStatusBadgeClass(member.role)}>
+                            {member.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-400">
+                          {formatDateTime(member.lastLoginAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
