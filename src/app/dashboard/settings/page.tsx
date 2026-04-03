@@ -35,6 +35,7 @@ import { ErrorState } from "@/components/error-state";
 import { MetadataUpdater } from "@/components/metadata-updater";
 import {
   api,
+  isApiNotFoundError,
   type ApiKeyRecord,
   type NotificationChannel,
   type User,
@@ -235,6 +236,7 @@ export default function SettingsPage() {
 
   const [profileStatus, setProfileStatus] = useState<AsyncStatus>("loading");
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileComingSoon, setProfileComingSoon] = useState(false);
   const [accountInfo, setAccountInfo] = useState<User | null>(null);
   const [profileForm, setProfileForm] = useState({
     name: "",
@@ -244,6 +246,7 @@ export default function SettingsPage() {
 
   const [apiKeysStatus, setApiKeysStatus] = useState<AsyncStatus>("idle");
   const [apiKeysError, setApiKeysError] = useState<string | null>(null);
+  const [apiKeysComingSoon, setApiKeysComingSoon] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
   const [apiKeyForm, setApiKeyForm] = useState<ApiKeyFormState>(DEFAULT_API_KEY_FORM);
   const [isCreatingApiKey, setIsCreatingApiKey] = useState(false);
@@ -253,6 +256,7 @@ export default function SettingsPage() {
 
   const [webhooksStatus, setWebhooksStatus] = useState<AsyncStatus>("idle");
   const [webhooksError, setWebhooksError] = useState<string | null>(null);
+  const [webhooksComingSoon, setWebhooksComingSoon] = useState(false);
   const [webhooks, setWebhooks] = useState<WebhookRecord[]>([]);
   const [webhookForm, setWebhookForm] = useState<WebhookFormState>(DEFAULT_WEBHOOK_FORM);
   const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
@@ -260,6 +264,7 @@ export default function SettingsPage() {
 
   const [notificationsStatus, setNotificationsStatus] = useState<AsyncStatus>("idle");
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notificationsComingSoon, setNotificationsComingSoon] = useState(false);
   const [notificationDrafts, setNotificationDrafts] = useState<NotificationDraft[]>([]);
   const [savingNotificationKey, setSavingNotificationKey] = useState<string | null>(null);
   const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
@@ -274,6 +279,7 @@ export default function SettingsPage() {
   async function loadProfile() {
     setProfileStatus("loading");
     setProfileError(null);
+    setProfileComingSoon(false);
 
     try {
       const response = await api.account.info();
@@ -286,6 +292,13 @@ export default function SettingsPage() {
       setProfileStatus("success");
       syncAuthStore(nextUser);
     } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setAccountInfo(null);
+        setProfileComingSoon(true);
+        setProfileStatus("success");
+        return;
+      }
+
       const message = getErrorMessage(error, "Failed to load profile.");
       setProfileError(message);
       setProfileStatus("error");
@@ -296,12 +309,20 @@ export default function SettingsPage() {
   async function loadApiKeys() {
     setApiKeysStatus("loading");
     setApiKeysError(null);
+    setApiKeysComingSoon(false);
 
     try {
       const response = await api.settings.apiKeys.list();
       setApiKeys(response.data);
       setApiKeysStatus("success");
     } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setApiKeys([]);
+        setApiKeysComingSoon(true);
+        setApiKeysStatus("success");
+        return;
+      }
+
       const message = getErrorMessage(error, "Failed to load API keys.");
       setApiKeysError(message);
       setApiKeysStatus("error");
@@ -312,12 +333,20 @@ export default function SettingsPage() {
   async function loadWebhooks() {
     setWebhooksStatus("loading");
     setWebhooksError(null);
+    setWebhooksComingSoon(false);
 
     try {
       const response = await api.settings.webhooks.list();
       setWebhooks(response.data);
       setWebhooksStatus("success");
     } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setWebhooks([]);
+        setWebhooksComingSoon(true);
+        setWebhooksStatus("success");
+        return;
+      }
+
       const message = getErrorMessage(error, "Failed to load webhooks.");
       setWebhooksError(message);
       setWebhooksStatus("error");
@@ -328,12 +357,20 @@ export default function SettingsPage() {
   async function loadNotifications() {
     setNotificationsStatus("loading");
     setNotificationsError(null);
+    setNotificationsComingSoon(false);
 
     try {
       const response = await api.settings.notifications.get();
       setNotificationDrafts(response.data.map((item) => toNotificationDraft(item)));
       setNotificationsStatus("success");
     } catch (error) {
+      if (isApiNotFoundError(error)) {
+        setNotificationDrafts([]);
+        setNotificationsComingSoon(true);
+        setNotificationsStatus("success");
+        return;
+      }
+
       const message = getErrorMessage(error, "Failed to load notifications.");
       setNotificationsError(message);
       setNotificationsStatus("error");
@@ -343,6 +380,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -399,8 +437,8 @@ export default function SettingsPage() {
       syncAuthStore(response.data);
       toast.success("Profile updated");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to update profile.");
-      toast.error("保存 Profile 失败", { description: message });
+      const message = isApiNotFoundError(error) ? "资料保存接口即将上线。" : getErrorMessage(error, "Failed to update profile.");
+      toast.error(isApiNotFoundError(error) ? "账号设置即将上线" : "保存 Profile 失败", { description: message });
     } finally {
       setIsSavingProfile(false);
     }
@@ -434,8 +472,8 @@ export default function SettingsPage() {
         });
       }
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to validate API key.");
-      toast.error("API Key 校验失败", { description: message });
+      const message = isApiNotFoundError(error) ? "API Key 校验接口即将上线。" : getErrorMessage(error, "Failed to validate API key.");
+      toast.error(isApiNotFoundError(error) ? "API Key 能力即将上线" : "API Key 校验失败", { description: message });
     } finally {
       setValidatingApiKeyId(null);
     }
@@ -460,8 +498,8 @@ export default function SettingsPage() {
       toast.success("API Key 已创建");
       await validateApiKey(response.data, true);
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to create API key.");
-      toast.error("创建 API Key 失败", { description: message });
+      const message = isApiNotFoundError(error) ? "API Key 创建接口即将上线。" : getErrorMessage(error, "Failed to create API key.");
+      toast.error(isApiNotFoundError(error) ? "API Key 能力即将上线" : "创建 API Key 失败", { description: message });
     } finally {
       setIsCreatingApiKey(false);
     }
@@ -483,8 +521,8 @@ export default function SettingsPage() {
       });
       toast.success("API Key 已删除");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to remove API key.");
-      toast.error("删除 API Key 失败", { description: message });
+      const message = isApiNotFoundError(error) ? "API Key 删除接口即将上线。" : getErrorMessage(error, "Failed to remove API key.");
+      toast.error(isApiNotFoundError(error) ? "API Key 能力即将上线" : "删除 API Key 失败", { description: message });
     } finally {
       setRemovingApiKeyId(null);
     }
@@ -522,8 +560,8 @@ export default function SettingsPage() {
       setWebhookForm(DEFAULT_WEBHOOK_FORM);
       toast.success("Webhook 已创建");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to create webhook.");
-      toast.error("创建 Webhook 失败", { description: message });
+      const message = isApiNotFoundError(error) ? "Webhook 创建接口即将上线。" : getErrorMessage(error, "Failed to create webhook.");
+      toast.error(isApiNotFoundError(error) ? "Webhook 能力即将上线" : "创建 Webhook 失败", { description: message });
     } finally {
       setIsCreatingWebhook(false);
     }
@@ -540,8 +578,8 @@ export default function SettingsPage() {
       setWebhooks((current) => current.filter((item) => item.id !== record.id));
       toast.success("Webhook 已删除");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to remove webhook.");
-      toast.error("删除 Webhook 失败", { description: message });
+      const message = isApiNotFoundError(error) ? "Webhook 删除接口即将上线。" : getErrorMessage(error, "Failed to remove webhook.");
+      toast.error(isApiNotFoundError(error) ? "Webhook 能力即将上线" : "删除 Webhook 失败", { description: message });
     } finally {
       setRemovingWebhookId(null);
     }
@@ -569,8 +607,8 @@ export default function SettingsPage() {
       setNotificationsStatus("success");
       toast.success("默认通知渠道已创建");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to initialize notifications.");
-      toast.error("初始化通知配置失败", { description: message });
+      const message = isApiNotFoundError(error) ? "通知初始化接口即将上线。" : getErrorMessage(error, "Failed to initialize notifications.");
+      toast.error(isApiNotFoundError(error) ? "通知能力即将上线" : "初始化通知配置失败", { description: message });
     } finally {
       setIsSeedingNotifications(false);
     }
@@ -617,8 +655,8 @@ export default function SettingsPage() {
       );
       toast.success("通知配置已更新");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to update notifications.");
-      toast.error("保存通知配置失败", { description: message });
+      const message = isApiNotFoundError(error) ? "通知保存接口即将上线。" : getErrorMessage(error, "Failed to update notifications.");
+      toast.error(isApiNotFoundError(error) ? "通知能力即将上线" : "保存通知配置失败", { description: message });
     } finally {
       setSavingNotificationKey(null);
     }
@@ -661,6 +699,15 @@ export default function SettingsPage() {
           <TabsContent value="profile" className="mt-0 space-y-6">
             {profileStatus === "loading" ? (
               <SectionSkeleton />
+            ) : profileComingSoon ? (
+              <EmptyState
+                icon={UserIcon}
+                title="账号设置即将上线"
+                description="当前环境尚未开放账号资料接口，后端发布后这里会直接显示真实资料与保存能力。"
+                actionLabel="重新加载"
+                onAction={() => void loadProfile()}
+                className="border-white/10 bg-zinc-950/60"
+              />
             ) : profileStatus === "error" ? (
               <ErrorState
                 title="Profile unavailable"
@@ -776,6 +823,17 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="api" className="mt-0 space-y-6">
+            {apiKeysComingSoon ? (
+              <EmptyState
+                icon={Key}
+                title="API Keys 即将上线"
+                description="当前环境尚未开放 API Key 接口，后端发布后这里会直接显示真实密钥列表与创建能力。"
+                actionLabel="重新加载"
+                onAction={() => void loadApiKeys()}
+                className="border-white/10 bg-zinc-950/60"
+              />
+            ) : (
+              <>
             <Card className="border-white/10 bg-zinc-950/60">
               <CardHeader>
                 <CardTitle className="text-white">Create API Key</CardTitle>
@@ -952,9 +1010,22 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="webhooks" className="mt-0 space-y-6">
+            {webhooksComingSoon ? (
+              <EmptyState
+                icon={Webhook}
+                title="Webhooks 即将上线"
+                description="当前环境尚未开放 Webhook 接口，后端发布后这里会直接显示真实端点列表与创建能力。"
+                actionLabel="重新加载"
+                onAction={() => void loadWebhooks()}
+                className="border-white/10 bg-zinc-950/60"
+              />
+            ) : (
+              <>
             <Card className="border-white/10 bg-zinc-950/60">
               <CardHeader>
                 <CardTitle className="text-white">Add Webhook Endpoint</CardTitle>
@@ -1116,9 +1187,22 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="notifications" className="mt-0 space-y-6">
+            {notificationsComingSoon ? (
+              <EmptyState
+                icon={BellRing}
+                title="通知设置即将上线"
+                description="当前环境尚未开放通知配置接口，后端发布后这里会直接显示真实渠道与事件规则。"
+                actionLabel="重新加载"
+                onAction={() => void loadNotifications()}
+                className="border-white/10 bg-zinc-950/60"
+              />
+            ) : (
+              <>
             <Card className="border-white/10 bg-zinc-950/60">
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -1229,6 +1313,8 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </TabsContent>
         </div>
       </Tabs>
