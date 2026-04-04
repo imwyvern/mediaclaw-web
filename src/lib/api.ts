@@ -544,6 +544,18 @@ export interface NotificationChannel {
   updatedAt?: string;
 }
 
+export interface NotificationFeedItem {
+  id: string;
+  source: "task" | "discovery";
+  event: string;
+  title: string;
+  content: string;
+  status: string;
+  relatedId: string;
+  createdAt?: string;
+  data: Record<string, unknown>;
+}
+
 interface RefreshResponse {
   accessToken: string;
   refreshToken?: string;
@@ -1004,6 +1016,26 @@ function normalizeBrand(raw: unknown): Brand {
   const record = objectValue(raw) || {};
   const name = stringValue(record.name, "未命名品牌");
   const visualIdentity = objectValue(record.visualIdentity) || {};
+  const assets = objectValue(record.assets) || visualIdentity;
+  const videoStyle = objectValue(record.videoStyle);
+  const colors =
+    arrayValue<string>(record.colors).length > 0
+      ? arrayValue<string>(record.colors)
+      : arrayValue<string>(assets.colors);
+  const fonts =
+    arrayValue<string>(record.fonts).length > 0
+      ? arrayValue<string>(record.fonts)
+      : arrayValue<string>(assets.fonts);
+  const preferredDuration = numberValue(videoStyle?.preferredDuration, 0);
+  const aspectRatio = stringOrUndefined(videoStyle?.aspectRatio);
+  const videoStyleLabel =
+    typeof record.videoStyle === "string"
+      ? stringOrUndefined(record.videoStyle)
+      : preferredDuration > 0 || aspectRatio
+        ? [preferredDuration > 0 ? `${preferredDuration}s` : undefined, aspectRatio]
+            .filter(Boolean)
+            .join(" / ")
+        : undefined;
 
   return {
     id: extractId(record, "brand"),
@@ -1013,10 +1045,10 @@ function normalizeBrand(raw: unknown): Brand {
     pipelines: numberValue(record.pipelines ?? record.pipelineCount),
     videos: numberValue(record.videos ?? record.videoCount ?? record.contentCount),
     logo: stringValue(record.logo, initials(name)),
-    logoUrl: stringOrUndefined(record.logoUrl),
-    colors: arrayValue<string>(record.colors).length > 0 ? arrayValue<string>(record.colors) : arrayValue<string>(visualIdentity.colors),
-    fonts: arrayValue<string>(record.fonts).length > 0 ? arrayValue<string>(record.fonts) : arrayValue<string>(visualIdentity.fonts),
-    videoStyle: stringOrUndefined(record.videoStyle),
+    logoUrl: firstString(record.logoUrl, assets.logoUrl),
+    colors,
+    fonts,
+    videoStyle: videoStyleLabel,
     isActive: booleanValue(record.isActive, true),
     orgId: stringOrUndefined(record.orgId),
     createdAt: stringOrUndefined(record.createdAt),
@@ -1152,9 +1184,11 @@ function normalizeAuditLog(raw: unknown): AuditLogEntry {
 
 function normalizeCampaign(raw: unknown): CampaignRecord {
   const record = objectValue(raw) || {};
-  const totalVideos = numberValue(record.totalVideos ?? record.videoCount ?? record.targetVideos);
+  const totalVideos = numberValue(
+    record.totalVideos ?? record.totalPlanned ?? record.videoCount ?? record.targetVideos,
+  );
   const completed = numberValue(
-    record.completed ?? record.completedVideos ?? record.generatedVideos,
+    record.completed ?? record.completedVideos ?? record.completedCount ?? record.generatedVideos,
   );
   const progress = Math.max(
     0,
@@ -1184,7 +1218,9 @@ function normalizeCampaign(raw: unknown): CampaignRecord {
     platforms:
       arrayValue<string>(record.platforms).length > 0
         ? arrayValue<string>(record.platforms)
-        : arrayValue<string>(record.channels),
+        : arrayValue<string>(record.targetPlatforms).length > 0
+          ? arrayValue<string>(record.targetPlatforms)
+          : arrayValue<string>(record.channels),
     description: firstString(record.description, record.summary),
     objective: firstString(record.objective, record.goal),
     raw,
@@ -1788,6 +1824,30 @@ function normalizeNotificationList(payload: unknown) {
   return [] as NotificationChannel[];
 }
 
+function normalizeNotificationFeedItem(raw: unknown): NotificationFeedItem {
+  const record = objectValue(raw) || {};
+  return {
+    id: extractId(record, "notification-item"),
+    source: stringValue(record.source, "task") === "discovery" ? "discovery" : "task",
+    event: stringValue(record.event, "task.completed"),
+    title: stringValue(record.title, "系统通知"),
+    content: stringValue(record.content),
+    status: stringValue(record.status, "unread"),
+    relatedId: stringValue(record.relatedId),
+    createdAt: stringOrUndefined(record.createdAt),
+    data: objectValue(record.data) || {},
+  };
+}
+
+function normalizeNotificationFeedList(payload: unknown) {
+  const record = objectValue(payload);
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeNotificationFeedItem(item));
+  }
+
+  return normalizePaginated(record || {}, (item) => normalizeNotificationFeedItem(item));
+}
+
 function buildBrandPayload(data: Record<string, unknown>) {
   const name = stringOrUndefined(data.name);
   const industry = stringOrUndefined(data.industry) || stringOrUndefined(data.category);
@@ -1985,24 +2045,18 @@ const brandsApi = {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("brandId", id);
-    formData.append("assetType", assetType);
+    formData.append("type", assetType);
 
     return requestWithFallback([
       {
-        url: "/v1/asset/upload",
+        url: "/v1/assets",
         method: "POST",
         data: formData,
         headers: { "Content-Type": "multipart/form-data" },
       },
       {
-        url: `/v1/brands/${id}/assets`,
-        method: "PATCH",
-        data: formData,
-        headers: { "Content-Type": "multipart/form-data" },
-      },
-      {
-        url: `/v1/brand/${id}/assets`,
-        method: "PATCH",
+        url: "/v1/asset/upload",
+        method: "POST",
         data: formData,
         headers: { "Content-Type": "multipart/form-data" },
       },
@@ -2319,6 +2373,13 @@ const settingsApi = {
       ]),
   },
   notifications: {
+    listFeed: async (params?: { page?: number; limit?: number }) => {
+      const raw = await requestWithFallbackData<unknown>([
+        { url: "/v1/notifications/list", params },
+        { url: "/v1/notification/list", params },
+      ]);
+      return toResult(normalizeNotificationFeedList(raw));
+    },
     get: async () => {
       const raw = await requestWithFallbackData<unknown>([
         { url: "/v1/settings/notifications" },
@@ -2397,6 +2458,7 @@ const campaignsApi = {
     const raw = await requestWithFallbackData<unknown>([
       { url: "/v1/campaign/create", method: "POST", data: payload },
       { url: "/v1/campaign", method: "POST", data: payload },
+      { url: "/v1/campaigns", method: "POST", data: payload },
     ]);
     return toResult(normalizeCampaign(raw));
   },
@@ -2415,7 +2477,9 @@ const campaignsApi = {
     const candidates: RequestCandidate[] = payload.status && Object.keys(payload).length === 1
       ? [
           { url: `/v1/campaign/${id}/status`, method: "POST", data: { status: payload.status } },
+          { url: `/v1/campaigns/${id}/status`, method: "POST", data: { status: payload.status } },
           { url: `/v1/campaign/${id}`, method: "PATCH", data: payload },
+          { url: `/v1/campaigns/${id}`, method: "PATCH", data: payload },
         ]
       : [
           { url: `/v1/campaign/${id}`, method: "PATCH", data: payload },
@@ -2504,6 +2568,17 @@ const authApi = {
       url: "/v1/auth/enterprise/register",
       method: "POST",
       data,
+    }),
+  getWechatLoginUrl: (redirectUri?: string, state?: string) =>
+    request<{ url: string; redirectUrl: string }>({
+      url: "/v1/auth/wechat/login",
+      params: compactObject({ redirectUri, state }),
+    }),
+  wechatCallback: (code: string) =>
+    request<AuthResponse>({
+      url: "/v1/auth/wechat/callback",
+      method: "POST",
+      data: { code },
     }),
 };
 

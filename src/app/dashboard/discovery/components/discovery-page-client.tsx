@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Flame, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/empty-state";
 import { MetadataUpdater } from "@/components/metadata-updater";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type Brand,
   type DiscoveryPoolItem,
@@ -50,14 +48,12 @@ export function DiscoveryPageClient() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandsReady, setBrandsReady] = useState(false);
   const [brandsError, setBrandsError] = useState<string | null>(null);
-  const [brandsComingSoon, setBrandsComingSoon] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<DiscoveryPlatformFilter>("all");
   const [sortBy, setSortBy] = useState<DiscoverySortKey>("viralScore");
   const [industryDraft, setIndustryDraft] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [comingSoon, setComingSoon] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<DiscoveryPoolItem | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -78,20 +74,13 @@ export function DiscoveryPageClient() {
 
         setBrands(normalizeBrands(response.data));
         setBrandsError(null);
-        setBrandsComingSoon(false);
       } catch (error) {
         if (!active) {
           return;
         }
 
         setBrands([]);
-        if (isApiNotFoundError(error)) {
-          setBrandsComingSoon(true);
-          setBrandsError(null);
-        } else {
-          setBrandsComingSoon(false);
-          setBrandsError(readApiErrorMessage(error, "品牌列表同步失败，请稍后重试。"));
-        }
+        setBrandsError(readApiErrorMessage(error, "品牌列表同步失败，请稍后重试。"));
       } finally {
         if (active) {
           setBrandsReady(true);
@@ -112,7 +101,6 @@ export function DiscoveryPageClient() {
     const fetchPool = async () => {
       setLoading(true);
       setErrorMessage(null);
-      setComingSoon(false);
 
       try {
         const items = await getDiscoveryPool(industryFilter);
@@ -127,13 +115,7 @@ export function DiscoveryPageClient() {
         }
 
         setPool([]);
-        if (isApiNotFoundError(error)) {
-          setComingSoon(true);
-          setErrorMessage(null);
-        } else {
-          setComingSoon(false);
-          setErrorMessage(readErrorMessage(error, "推荐池加载失败，请稍后重试。"));
-        }
+        setErrorMessage(readErrorMessage(error, "推荐池加载失败，请稍后重试。"));
       } finally {
         if (active) {
           setLoading(false);
@@ -157,7 +139,6 @@ export function DiscoveryPageClient() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    setComingSoon(false);
 
     try {
       const items = await getDiscoveryPool(industryFilter);
@@ -165,18 +146,11 @@ export function DiscoveryPageClient() {
       setErrorMessage(null);
       toast.success("推荐池已刷新");
     } catch (error) {
-      if (isApiNotFoundError(error)) {
-        setComingSoon(true);
-        setPool([]);
-        setErrorMessage(null);
-        toast.info("爆款推荐池接口尚未开放");
-      } else {
-        const message = readErrorMessage(error, "推荐池加载失败，请稍后重试。");
-        if (pool.length === 0) {
-          setErrorMessage(message);
-        }
-        toast.error("刷新失败", { description: message });
+      const message = readErrorMessage(error, "推荐池加载失败，请稍后重试。");
+      if (pool.length === 0) {
+        setErrorMessage(message);
       }
+      toast.error("刷新失败", { description: message });
     } finally {
       setRefreshing(false);
     }
@@ -236,11 +210,6 @@ export function DiscoveryPageClient() {
   const handleRemix = async (item: DiscoveryPoolItem) => {
     if (!brandsReady) {
       toast.info("品牌空间还在同步，请稍后再试。");
-      return;
-    }
-
-    if (brandsComingSoon) {
-      toast.info("品牌工作区接口尚未开放，暂时不能发起复刻。");
       return;
     }
 
@@ -399,17 +368,6 @@ export function DiscoveryPageClient() {
             </Button>
           </div>
         </div>
-      ) : comingSoon ? (
-        <EmptyState
-          icon={Flame}
-          title="爆款推荐池即将上线"
-          description="当前环境未开放 discovery/pool 接口，页面已经切到真实 API 模式，后端准备好后会自动展示真实爆款内容。"
-          actionLabel="重新加载"
-          onAction={() => {
-            void handleRefresh();
-          }}
-          className="border-white/10 bg-black/20"
-        />
       ) : visibleItems.length === 0 ? (
         <DiscoveryEmptyState
           filtered={pool.length > 0}

@@ -47,7 +47,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type Brand,
   type CampaignRecord,
@@ -168,24 +167,20 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [comingSoon, setComingSoon] = useState(false);
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>([]);
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandsError, setBrandsError] = useState<string | null>(null);
-  const [brandsComingSoon, setBrandsComingSoon] = useState(false);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createComingSoon, setCreateComingSoon] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignRecord | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailComingSoon, setDetailComingSoon] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
 
   const loadCampaigns = async (options?: { silent?: boolean }) => {
@@ -196,9 +191,7 @@ export default function CampaignsPage() {
     }
 
     setError(null);
-    setComingSoon(false);
     setBrandsError(null);
-    setBrandsComingSoon(false);
 
     const [campaignsResult, brandsResult] = await Promise.allSettled([
       api.campaigns.list(),
@@ -207,9 +200,6 @@ export default function CampaignsPage() {
 
     if (campaignsResult.status === "fulfilled") {
       setCampaigns(campaignsResult.value.data);
-    } else if (isApiNotFoundError(campaignsResult.reason)) {
-      setCampaigns([]);
-      setComingSoon(true);
     } else {
       setCampaigns([]);
       setError(readApiErrorMessage(campaignsResult.reason, "活动列表加载失败，请稍后重试。"));
@@ -217,9 +207,6 @@ export default function CampaignsPage() {
 
     if (brandsResult.status === "fulfilled") {
       setBrands(brandsResult.value.data);
-    } else if (isApiNotFoundError(brandsResult.reason)) {
-      setBrands([]);
-      setBrandsComingSoon(true);
     } else {
       setBrands([]);
       setBrandsError(readApiErrorMessage(brandsResult.reason, "品牌列表加载失败，创建活动暂不可用。"));
@@ -242,17 +229,12 @@ export default function CampaignsPage() {
     setSelectedCampaign(campaign);
     setDetailLoading(true);
     setDetailError(null);
-    setDetailComingSoon(false);
 
     try {
       const response = await api.campaigns.get(campaign.id);
       setSelectedCampaign(response.data);
     } catch (loadError) {
-      if (isApiNotFoundError(loadError)) {
-        setDetailComingSoon(true);
-      } else {
-        setDetailError(readApiErrorMessage(loadError, "活动详情加载失败，请稍后重试。"));
-      }
+      setDetailError(readApiErrorMessage(loadError, "活动详情加载失败，请稍后重试。"));
     } finally {
       setDetailLoading(false);
     }
@@ -271,7 +253,6 @@ export default function CampaignsPage() {
 
     setCreateSubmitting(true);
     setCreateError(null);
-    setCreateComingSoon(false);
 
     try {
       const response = await api.campaigns.create({
@@ -291,11 +272,7 @@ export default function CampaignsPage() {
       toast.success("活动已创建");
       void loadCampaigns({ silent: true });
     } catch (submitError) {
-      if (isApiNotFoundError(submitError)) {
-        setCreateComingSoon(true);
-      } else {
-        setCreateError(readApiErrorMessage(submitError, "活动创建失败，请稍后重试。"));
-      }
+      setCreateError(readApiErrorMessage(submitError, "活动创建失败，请稍后重试。"));
     } finally {
       setCreateSubmitting(false);
     }
@@ -315,17 +292,13 @@ export default function CampaignsPage() {
       setCampaigns((current) => upsertCampaign(current, response.data));
       toast.success("活动状态已更新");
     } catch (updateError) {
-      if (isApiNotFoundError(updateError)) {
-        setDetailComingSoon(true);
-      } else {
-        setDetailError(readApiErrorMessage(updateError, "状态更新失败，请稍后重试。"));
-      }
+      setDetailError(readApiErrorMessage(updateError, "状态更新失败，请稍后重试。"));
     } finally {
       setStatusUpdating(null);
     }
   };
 
-  const createDisabled = brandsComingSoon || Boolean(brandsError) || brands.length === 0;
+  const createDisabled = Boolean(brandsError) || brands.length === 0;
 
   return (
     <div className="flex flex-col gap-8 pb-8 animate-in fade-in duration-500">
@@ -355,7 +328,6 @@ export default function CampaignsPage() {
             className="bg-white text-slate-950 hover:bg-slate-100"
             onClick={() => {
               setCreateError(null);
-              setCreateComingSoon(false);
               setIsCreateOpen(true);
             }}
           >
@@ -380,17 +352,6 @@ export default function CampaignsPage() {
           }}
           className="border-white/10 bg-black/20"
         />
-      ) : comingSoon ? (
-        <EmptyState
-          icon={Rocket}
-          title="营销活动即将上线"
-          description="campaign 接口在当前环境还未开放，页面已改成真实 API 模式，后端准备好后会自动展示真实活动。"
-          actionLabel="重新加载"
-          onAction={() => {
-            void loadCampaigns();
-          }}
-          className="border-white/10 bg-black/20"
-        />
       ) : campaigns.length === 0 ? (
         <EmptyState
           icon={Rocket}
@@ -403,7 +364,6 @@ export default function CampaignsPage() {
               return;
             }
             setCreateError(null);
-            setCreateComingSoon(false);
             setIsCreateOpen(true);
           }}
           className="border-white/10 bg-black/20"
@@ -496,33 +456,11 @@ export default function CampaignsPage() {
               }}
               className="border-white/10 bg-black/20"
             />
-          ) : brandsComingSoon ? (
-            <EmptyState
-              icon={Target}
-              title="品牌数据即将上线"
-              description="当前环境还未开放品牌列表接口，所以暂时无法从真实品牌中创建营销活动。"
-              actionLabel="重新加载"
-              onAction={() => {
-                void loadCampaigns({ silent: true });
-              }}
-              className="border-white/10 bg-black/20 py-12"
-            />
           ) : brands.length === 0 ? (
             <EmptyState
               icon={Target}
               title="暂无可选品牌"
               description="请先创建品牌工作区，再绑定活动到真实品牌。"
-              className="border-white/10 bg-black/20 py-12"
-            />
-          ) : createComingSoon ? (
-            <EmptyState
-              icon={Rocket}
-              title="活动创建接口即将上线"
-              description="当前环境未开放 campaign/create，等后端接入后这里会直接提交真实创建请求。"
-              actionLabel="关闭弹窗"
-              onAction={() => {
-                setIsCreateOpen(false);
-              }}
               className="border-white/10 bg-black/20 py-12"
             />
           ) : (
@@ -664,7 +602,7 @@ export default function CampaignsPage() {
               onClick={() => {
                 void handleCreateCampaign();
               }}
-              disabled={createSubmitting || createDisabled || createComingSoon}
+              disabled={createSubmitting || createDisabled}
             >
               {createSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               创建活动
@@ -679,7 +617,6 @@ export default function CampaignsPage() {
           setDetailOpen(open);
           if (!open) {
             setDetailError(null);
-            setDetailComingSoon(false);
             setStatusUpdating(null);
           }
         }}
@@ -708,13 +645,6 @@ export default function CampaignsPage() {
                 }
               }}
               className="border-white/10 bg-black/20"
-            />
-          ) : detailComingSoon ? (
-            <EmptyState
-              icon={Rocket}
-              title="活动详情即将上线"
-              description="当前环境未开放 campaign 详情或状态接口，后端准备好后这里会直接展示真实详情。"
-              className="border-white/10 bg-black/20 py-12"
             />
           ) : selectedCampaign ? (
             <div className="space-y-5 py-2">

@@ -34,7 +34,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type CalendarTask,
 } from "@/lib/api";
@@ -139,7 +138,6 @@ export default function CalendarPage() {
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [comingSoon, setComingSoon] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const monthStart = startOfMonth(currentDate);
@@ -157,18 +155,12 @@ export default function CalendarPage() {
     }
 
     setError(null);
-    setComingSoon(false);
-
     try {
       const response = await api.calendar.scheduled({ month: monthKey, status: "scheduled" });
       setTasks(response.data);
     } catch (loadError) {
       setTasks([]);
-      if (isApiNotFoundError(loadError)) {
-        setComingSoon(true);
-      } else {
-        setError(readApiErrorMessage(loadError, "排期加载失败，请稍后重试。"));
-      }
+      setError(readApiErrorMessage(loadError, "排期加载失败，请稍后重试。"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -281,22 +273,11 @@ export default function CalendarPage() {
             }}
             className="border-white/10 bg-black/20"
           />
-        ) : comingSoon ? (
-          <EmptyState
-            icon={CalendarIcon}
-            title="内容排期即将上线"
-            description="排期服务接口还未在当前环境开放，页面已做好接入，后端准备好后会自动显示真实任务。"
-            actionLabel="去创建视频"
-            onAction={() => {
-              window.location.href = "/dashboard/videos/create";
-            }}
-            className="border-white/10 bg-black/20"
-          />
         ) : tasks.length === 0 ? (
           <EmptyState
             icon={CalendarIcon}
             title="本月暂无排期，去创建视频吧"
-            description="一旦有真实待发布任务，这里会自动按日期铺开，不再使用任何 mock 数据。"
+            description="一旦有真实待发布任务，这里会自动按日期铺开，直接呈现排期结果。"
             actionLabel="创建第一条视频"
             onAction={() => {
               window.location.href = "/dashboard/videos/create";

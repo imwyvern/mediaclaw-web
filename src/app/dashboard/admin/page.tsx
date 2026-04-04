@@ -38,7 +38,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type AdminClientRecord,
   type AdminHealthStatus,
@@ -143,11 +142,6 @@ export default function AdminPage() {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
 
-  const [clientsComingSoon, setClientsComingSoon] = useState(false);
-  const [healthComingSoon, setHealthComingSoon] = useState(false);
-  const [auditComingSoon, setAuditComingSoon] = useState(false);
-  const [membersComingSoon, setMembersComingSoon] = useState(false);
-
   const loadAdminData = async (options?: { silent?: boolean }) => {
     if (options?.silent) {
       setRefreshing(true);
@@ -159,10 +153,6 @@ export default function AdminPage() {
     setHealthError(null);
     setAuditError(null);
     setMembersError(null);
-    setClientsComingSoon(false);
-    setHealthComingSoon(false);
-    setAuditComingSoon(false);
-    setMembersComingSoon(false);
 
     const [clientsResult, healthResult, auditResult, membersResult] = await Promise.allSettled([
       api.admin.clients(),
@@ -173,9 +163,6 @@ export default function AdminPage() {
 
     if (clientsResult.status === "fulfilled") {
       setClients(clientsResult.value.data);
-    } else if (isApiNotFoundError(clientsResult.reason)) {
-      setClients([]);
-      setClientsComingSoon(true);
     } else {
       setClients([]);
       setClientsError(
@@ -185,9 +172,6 @@ export default function AdminPage() {
 
     if (healthResult.status === "fulfilled") {
       setHealth(healthResult.value.data);
-    } else if (isApiNotFoundError(healthResult.reason)) {
-      setHealth(null);
-      setHealthComingSoon(true);
     } else {
       setHealth(null);
       setHealthError(
@@ -197,9 +181,6 @@ export default function AdminPage() {
 
     if (auditResult.status === "fulfilled") {
       setAuditLogs(auditResult.value.data);
-    } else if (isApiNotFoundError(auditResult.reason)) {
-      setAuditLogs(EMPTY_AUDIT_LOGS);
-      setAuditComingSoon(true);
     } else {
       setAuditLogs(EMPTY_AUDIT_LOGS);
       setAuditError(
@@ -209,9 +190,6 @@ export default function AdminPage() {
 
     if (membersResult.status === "fulfilled") {
       setMembers(membersResult.value.data);
-    } else if (isApiNotFoundError(membersResult.reason)) {
-      setMembers([]);
-      setMembersComingSoon(true);
     } else {
       setMembers([]);
       setMembersError(
@@ -366,17 +344,6 @@ export default function AdminPage() {
               }}
               className="border-white/10 bg-black/20"
             />
-          ) : clientsComingSoon ? (
-            <EmptyState
-              icon={Building2}
-              title="客户管理即将上线"
-              description="当前环境还没有开放 client-mgmt 接口，后端准备好后这里会直接展示真实组织列表。"
-              actionLabel="重新加载"
-              onAction={() => {
-                void loadAdminData();
-              }}
-              className="border-white/10 bg-black/20"
-            />
           ) : clients.length === 0 ? (
             <EmptyState
               icon={Building2}
@@ -454,17 +421,6 @@ export default function AdminPage() {
               title="系统状态加载失败"
               description={healthError}
               onRetry={() => {
-                void loadAdminData();
-              }}
-              className="border-white/10 bg-black/20"
-            />
-          ) : healthComingSoon ? (
-            <EmptyState
-              icon={Activity}
-              title="系统健康面板即将上线"
-              description="health/status 接口在当前环境尚未开放，服务连通后会在这里展示真实健康度。"
-              actionLabel="重新加载"
-              onAction={() => {
                 void loadAdminData();
               }}
               className="border-white/10 bg-black/20"
@@ -600,17 +556,6 @@ export default function AdminPage() {
               }}
               className="border-white/10 bg-black/20"
             />
-          ) : auditComingSoon ? (
-            <EmptyState
-              icon={FileClock}
-              title="审计日志即将上线"
-              description="当前环境还没有开放 audit/logs 接口，等后端接入后会直接显示真实操作轨迹。"
-              actionLabel="重新加载"
-              onAction={() => {
-                void loadAdminData();
-              }}
-              className="border-white/10 bg-black/20"
-            />
           ) : auditLogs.items.length === 0 ? (
             <EmptyState
               icon={FileClock}
@@ -677,17 +622,6 @@ export default function AdminPage() {
               title="成员列表加载失败"
               description={membersError}
               onRetry={() => {
-                void loadAdminData();
-              }}
-              className="border-white/10 bg-black/20"
-            />
-          ) : membersComingSoon ? (
-            <EmptyState
-              icon={Users}
-              title="用户列表即将上线"
-              description="组织成员接口在当前环境未开放，准备好后这里会直接展示真实成员数据。"
-              actionLabel="重新加载"
-              onAction={() => {
                 void loadAdminData();
               }}
               className="border-white/10 bg-black/20"

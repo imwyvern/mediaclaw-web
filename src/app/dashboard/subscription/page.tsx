@@ -22,7 +22,6 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type AccountPack,
   type AccountSnapshot,
@@ -112,11 +111,8 @@ function ActivePackCard({ pack, product }: { pack: AccountPack; product?: Paymen
 export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [productsComingSoon, setProductsComingSoon] = useState(false);
-  const [ordersComingSoon, setOrdersComingSoon] = useState(false);
-  const [accountComingSoon, setAccountComingSoon] = useState(false);
-  const [usageComingSoon, setUsageComingSoon] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [products, setProducts] = useState<PaymentProduct[]>([]);
@@ -126,10 +122,7 @@ export default function SubscriptionPage() {
     setLoading(true);
     setError(null);
     setOrdersError(null);
-    setProductsComingSoon(false);
-    setOrdersComingSoon(false);
-    setAccountComingSoon(false);
-    setUsageComingSoon(false);
+    setUsageError(null);
 
     const results = await Promise.allSettled([
       api.account.get(),
@@ -143,9 +136,6 @@ export default function SubscriptionPage() {
 
     if (accountResult.status === "fulfilled") {
       setAccount(accountResult.value.data);
-    } else if (isApiNotFoundError(accountResult.reason)) {
-      setAccount(null);
-      setAccountComingSoon(true);
     } else {
       setAccount(null);
       fatalErrors.push(readApiErrorMessage(accountResult.reason, "订阅账户数据加载失败，请稍后重试。"));
@@ -153,18 +143,13 @@ export default function SubscriptionPage() {
 
     if (usageResult.status === "fulfilled") {
       setUsage(usageResult.value.data);
-    } else if (isApiNotFoundError(usageResult.reason)) {
-      setUsage(null);
-      setUsageComingSoon(true);
     } else {
       setUsage(null);
+      setUsageError(readApiErrorMessage(usageResult.reason, "用量汇总加载失败，请稍后重试。"));
     }
 
     if (productsResult.status === "fulfilled") {
       setProducts(sortPaymentProducts(productsResult.value.data));
-    } else if (isApiNotFoundError(productsResult.reason)) {
-      setProducts([]);
-      setProductsComingSoon(true);
     } else {
       setProducts([]);
       fatalErrors.push(readApiErrorMessage(productsResult.reason, "订阅方案加载失败，请稍后重试。"));
@@ -172,11 +157,8 @@ export default function SubscriptionPage() {
 
     if (ordersResult.status === "fulfilled") {
       setOrders(ordersResult.value.data);
-    } else if (isApiNotFoundError(ordersResult.reason)) {
-      setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
-      setOrdersComingSoon(true);
     } else {
-      setOrders(null);
+      setOrders({ items: [], total: 0, page: 1, limit: ORDER_PAGE_SIZE });
       setOrdersError(readApiErrorMessage(ordersResult.reason, "账单记录加载失败，请稍后重试。"));
     }
 
@@ -210,7 +192,6 @@ export default function SubscriptionPage() {
   const monthlyCost = usage?.totals.estimatedCost ?? usage?.totals.tokenCost ?? 0;
   const remainingCredits = account?.credits.remaining ?? 0;
   const currentUsagePercent = currentPack ? getPackUsagePercent(currentPack) : 0;
-  const pageComingSoon = !account && products.length === 0 && (accountComingSoon || productsComingSoon);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 animate-in fade-in duration-500">
@@ -245,38 +226,26 @@ export default function SubscriptionPage() {
 
       <DataState
         loading={loading}
-        error={pageComingSoon ? null : error}
-        isEmpty={!loading && (pageComingSoon || (!error && !account && products.length === 0))}
+        error={error}
+        isEmpty={!loading && !error && !account && products.length === 0}
         onRetry={() => {
           void loadData();
         }}
         emptyState={
-          pageComingSoon ? (
-            <WarmEmptyState
-              icon={Sparkles}
-              title="订阅面板即将上线"
-              description="当前环境尚未开放订阅账户或方案接口，后端发布后这里会直接展示真实方案、资源包和账单。"
-              actionLabel="重新加载"
-              onAction={() => {
-                void loadData();
-              }}
-            />
-          ) : (
-            <WarmEmptyState
-              icon={Sparkles}
-              title="还没有可展示的方案数据"
-              description="完成第一笔购买后，这里会自动展示当前方案、用量和升级路径。"
-              actionLabel="去 Billing"
-              onAction={() => {
-                window.location.href = "/dashboard/billing";
-              }}
-            />
-          )
+          <WarmEmptyState
+            icon={Sparkles}
+            title="还没有可展示的方案数据"
+            description="完成第一笔购买后，这里会自动展示当前方案、用量和升级路径。"
+            actionLabel="去 Billing"
+            onAction={() => {
+              window.location.href = "/dashboard/billing";
+            }}
+          />
         }
       >
-        {usageComingSoon ? (
+        {usageError ? (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            当前环境尚未开放用量汇总接口，本月用量与成本将在后端发布后自动补齐。
+            {usageError}
           </div>
         ) : null}
 
@@ -366,27 +335,15 @@ export default function SubscriptionPage() {
             </CardHeader>
             <CardContent>
               {activePacks.length === 0 ? (
-                accountComingSoon ? (
-                  <WarmEmptyState
-                    icon={Package}
-                    title="资源包视图即将上线"
-                    description="当前环境尚未开放账户资源包接口，后端发布后这里会直接显示真实剩余条数与进度。"
-                    actionLabel="重新加载"
-                    onAction={() => {
-                      void loadData();
-                    }}
-                  />
-                ) : (
-                  <WarmEmptyState
-                    icon={Package}
-                    title="还没有生效中的资源包"
-                    description="完成第一笔购买后，这里会显示每个资源包的剩余条数和使用进度。"
-                    actionLabel="去购买"
-                    onAction={() => {
-                      window.location.href = "/dashboard/billing/checkout";
-                    }}
-                  />
-                )
+                <WarmEmptyState
+                  icon={Package}
+                  title="还没有生效中的资源包"
+                  description="完成第一笔购买后，这里会显示每个资源包的剩余条数和使用进度。"
+                  actionLabel="去购买"
+                  onAction={() => {
+                    window.location.href = "/dashboard/billing/checkout";
+                  }}
+                />
               ) : (
                 <div className="space-y-4">
                   {activePacks.map((pack) => (
@@ -407,23 +364,11 @@ export default function SubscriptionPage() {
           </CardHeader>
           <CardContent>
             {products.length === 0 ? (
-              productsComingSoon ? (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="方案列表即将上线"
-                  description="当前环境尚未开放支付商品接口，后端发布后这里会直接展示真实资源包与升级路径。"
-                  actionLabel="重新加载"
-                  onAction={() => {
-                    void loadData();
-                  }}
-                />
-              ) : (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="还没有可切换的方案"
-                  description="支付商品配置完成后，这里会自动展示所有资源包。"
-                />
-              )
+              <WarmEmptyState
+                icon={Sparkles}
+                title="还没有可切换的方案"
+                description="支付商品配置完成后，这里会自动展示所有资源包。"
+              />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {products.map((product) => {
@@ -499,27 +444,15 @@ export default function SubscriptionPage() {
           <CardContent>
             <DataState
               loading={loading}
-              error={ordersComingSoon ? null : ordersError}
-              isEmpty={!loading && (ordersComingSoon || (orders?.items.length || 0) === 0)}
+              error={ordersError}
+              isEmpty={!loading && !ordersError && (orders?.items.length || 0) === 0}
               loadingState={<TableSkeleton rows={5} columns={4} />}
               emptyState={
-                ordersComingSoon ? (
-                  <WarmEmptyState
-                    icon={CreditCard}
-                    title="账单记录即将上线"
-                    description="当前环境尚未开放订单历史接口，后端发布后这里会直接展示最近付款状态与金额。"
-                    actionLabel="重新加载"
-                    onAction={() => {
-                      void loadData();
-                    }}
-                  />
-                ) : (
-                  <WarmEmptyState
-                    icon={CreditCard}
-                    title="还没有账单记录"
-                    description="当产生第一笔支付订单后，这里会自动沉淀成历史账单。"
-                  />
-                )
+                <WarmEmptyState
+                  icon={CreditCard}
+                  title="还没有账单记录"
+                  description="当产生第一笔支付订单后，这里会自动沉淀成历史账单。"
+                />
               }
             >
               <div className="overflow-hidden rounded-2xl border border-border/70">

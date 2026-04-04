@@ -12,7 +12,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  Sparkles,
   ShieldCheck,
   ShieldX,
 } from "lucide-react";
@@ -42,7 +41,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api, isApiNotFoundError, type ContentItem } from "@/lib/api";
+import { api, type ContentItem } from "@/lib/api";
 import { formatCompactNumber, formatDateTime } from "@/lib/format";
 import { normalizeVideoStatus, type VideoLifecycleStatus } from "@/lib/video-status";
 import { cn } from "@/lib/utils";
@@ -288,7 +287,6 @@ export default function ContentManagementPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [comingSoon, setComingSoon] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<ContentItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -305,25 +303,17 @@ export default function ContentManagementPage() {
       setError(null);
     }
 
-    setComingSoon(false);
-
     try {
       const response = await api.content.list();
       setContent(Array.isArray(response.data) ? response.data : []);
       setError(null);
     } catch (loadError) {
-      console.error("Failed to fetch content list", loadError);
-      if (isApiNotFoundError(loadError)) {
-        setContent([]);
-        setError(null);
-        setComingSoon(true);
-      } else {
-        const message = getErrorMessage(loadError);
-        if (!background || content.length === 0) {
-          setError(message);
-        }
-        toast.error(message);
+      const message = getErrorMessage(loadError);
+      setContent([]);
+      if (!background || content.length === 0) {
+        setError(message);
       }
+      toast.error(message);
     } finally {
       if (background) {
         setRefreshing(false);
@@ -372,8 +362,7 @@ export default function ContentManagementPage() {
       toast.success(`《${item.title}》已通过审核`);
       await loadContent({ background: true });
     } catch (approveError) {
-      console.error("Failed to approve content", approveError);
-      toast.error(isApiNotFoundError(approveError) ? "审核接口即将上线" : getErrorMessage(approveError));
+      toast.error(getErrorMessage(approveError));
     } finally {
       setPendingAction(null);
     }
@@ -399,8 +388,7 @@ export default function ContentManagementPage() {
       setRejectComment("");
       await loadContent({ background: true });
     } catch (rejectError) {
-      console.error("Failed to reject content", rejectError);
-      toast.error(isApiNotFoundError(rejectError) ? "驳回接口即将上线" : getErrorMessage(rejectError));
+      toast.error(getErrorMessage(rejectError));
     } finally {
       setPendingAction(null);
     }
@@ -414,8 +402,7 @@ export default function ContentManagementPage() {
       toast.success(`《${item.title}》已标记为发布完成`);
       await loadContent({ background: true });
     } catch (publishError) {
-      console.error("Failed to mark content as published", publishError);
-      toast.error(isApiNotFoundError(publishError) ? "发布回写接口即将上线" : getErrorMessage(publishError));
+      toast.error(getErrorMessage(publishError));
     } finally {
       setPendingAction(null);
     }
@@ -492,16 +479,6 @@ export default function ContentManagementPage() {
           description={error}
           onRetry={() => void loadContent()}
           className="border-border/60 bg-card/60"
-        />
-      ) : comingSoon ? (
-        <WarmEmptyState
-          icon={Sparkles}
-          title="内容审核即将上线"
-          description="当前环境尚未开放内容管理列表接口，待后端发布后这里会直接展示真实审核流与发布状态。"
-          actionLabel="重新加载"
-          onAction={() => {
-            void loadContent();
-          }}
         />
       ) : content.length === 0 ? (
         <WarmEmptyState

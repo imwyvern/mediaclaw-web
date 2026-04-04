@@ -28,7 +28,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type AccountSnapshot,
   type PaginatedResponse,
@@ -96,10 +95,8 @@ function StatCard({
 export default function UsagePage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [summaryComingSoon, setSummaryComingSoon] = useState(false);
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailComingSoon, setDetailComingSoon] = useState(false);
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [timeline, setTimeline] = useState<UsageTimeline | null>(null);
@@ -109,7 +106,6 @@ export default function UsagePage() {
   const loadSummary = async () => {
     setSummaryLoading(true);
     setSummaryError(null);
-    setSummaryComingSoon(false);
 
     try {
       const [accountResponse, usageResponse, timelineResponse] = await Promise.all([
@@ -122,14 +118,10 @@ export default function UsagePage() {
       setUsage(usageResponse.data);
       setTimeline(timelineResponse.data);
     } catch (error) {
-      if (isApiNotFoundError(error)) {
-        setAccount(null);
-        setUsage(null);
-        setTimeline(null);
-        setSummaryComingSoon(true);
-      } else {
-        setSummaryError(readApiErrorMessage(error, "用量概览加载失败，请稍后重试。"));
-      }
+      setAccount(null);
+      setUsage(null);
+      setTimeline(null);
+      setSummaryError(readApiErrorMessage(error, "用量概览加载失败，请稍后重试。"));
     } finally {
       setSummaryLoading(false);
     }
@@ -138,18 +130,13 @@ export default function UsagePage() {
   const loadDetail = async (nextPage: number) => {
     setDetailLoading(true);
     setDetailError(null);
-    setDetailComingSoon(false);
 
     try {
       const response = await api.account.usageDetail({ page: nextPage, limit: PAGE_SIZE });
       setDetail(response.data);
     } catch (error) {
-      if (isApiNotFoundError(error)) {
-        setDetail({ items: [], total: 0, page: nextPage, limit: PAGE_SIZE });
-        setDetailComingSoon(true);
-      } else {
-        setDetailError(readApiErrorMessage(error, "消耗明细加载失败，请稍后重试。"));
-      }
+      setDetail({ items: [], total: 0, page: nextPage, limit: PAGE_SIZE });
+      setDetailError(readApiErrorMessage(error, "消耗明细加载失败，请稍后重试。"));
     } finally {
       setDetailLoading(false);
     }
@@ -218,33 +205,21 @@ export default function UsagePage() {
 
       <DataState
         loading={summaryLoading}
-        error={summaryComingSoon ? null : summaryError}
-        isEmpty={!summaryLoading && (summaryComingSoon || !hasSummaryData)}
+        error={summaryError}
+        isEmpty={!summaryLoading && !summaryError && !hasSummaryData}
         onRetry={() => {
           void loadSummary();
         }}
         emptyState={
-          summaryComingSoon ? (
-            <WarmEmptyState
-              icon={Sparkles}
-              title="用量面板即将上线"
-              description="当前环境尚未开放用量概览接口，后端发布后这里会直接展示真实额度、Token 和成本曲线。"
-              actionLabel="重新加载"
-              onAction={() => {
-                void loadSummary();
-              }}
-            />
-          ) : (
-            <WarmEmptyState
-              icon={Sparkles}
-              title="还没有可统计的用量数据"
-              description="生成第一条真实视频后，这里会开始展示额度、Token 和成本曲线。"
-              actionLabel="去创建视频"
-              onAction={() => {
-                window.location.href = "/dashboard/videos/create";
-              }}
-            />
-          )
+          <WarmEmptyState
+            icon={Sparkles}
+            title="还没有可统计的用量数据"
+            description="生成第一条真实视频后，这里会开始展示额度、Token 和成本曲线。"
+            actionLabel="去创建视频"
+            onAction={() => {
+              window.location.href = "/dashboard/videos/create";
+            }}
+          />
         }
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -409,34 +384,22 @@ export default function UsagePage() {
         <CardContent className="space-y-4">
           <DataState
             loading={detailLoading}
-            error={detailComingSoon ? null : detailError}
-            isEmpty={!detailLoading && (detailComingSoon || (detail?.items.length || 0) === 0)}
+            error={detailError}
+            isEmpty={!detailLoading && !detailError && (detail?.items.length || 0) === 0}
             loadingState={<TableSkeleton rows={6} columns={5} />}
             onRetry={() => {
               void loadDetail(page);
             }}
             emptyState={
-              detailComingSoon ? (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="消耗明细即将上线"
-                  description="当前环境尚未开放用量明细接口，待后端发布后这里会自动展示每一条真实消耗账本。"
-                  actionLabel="重新加载"
-                  onAction={() => {
-                    void loadDetail(page);
-                  }}
-                />
-              ) : (
-                <WarmEmptyState
-                  icon={Sparkles}
-                  title="还没有消耗记录"
-                  description="当真实任务开始消耗额度后，这里会自动生成明细表，方便你逐条追溯。"
-                  actionLabel="去生成第一条视频"
-                  onAction={() => {
-                    window.location.href = "/dashboard/videos/create";
-                  }}
-                />
-              )
+              <WarmEmptyState
+                icon={Sparkles}
+                title="还没有消耗记录"
+                description="当真实任务开始消耗额度后，这里会自动生成明细表，方便你逐条追溯。"
+                actionLabel="去生成第一条视频"
+                onAction={() => {
+                  window.location.href = "/dashboard/videos/create";
+                }}
+              />
             }
           >
             <div className="overflow-hidden rounded-2xl border border-border/70">

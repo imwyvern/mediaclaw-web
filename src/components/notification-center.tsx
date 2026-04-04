@@ -1,79 +1,141 @@
 "use client";
 
-import { wsManager } from "@/lib/ws";
-import { useEffect, useState } from "react";
-import { 
-  Bell, 
-  CheckCheck, 
-  Video, 
-  AlertCircle, 
-  Zap, 
-  Store,
-  ExternalLink,
-  Circle
-} from "lucide-react";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Bell,
+  CheckCheck,
+  Circle,
+  ExternalLink,
+  Store,
+  Video,
+  Zap,
+} from "lucide-react";
 
-interface Notification {
-  id: string;
-  title: string;
-  description: string;
-  type: "success" | "error" | "warning" | "info";
-  time: string;
-  read: boolean;
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { api, readApiErrorMessage, type NotificationFeedItem } from "@/lib/api";
+import { wsManager } from "@/lib/ws";
+
+function formatNotificationTime(value?: string) {
+  if (!value) {
+    return "刚刚";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "刚刚";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: "1", title: "视频渲染完成", description: "您的视频 'Q3 营销主片' 已处理完成，点击查看。", type: "success", time: "2分钟前", read: false },
-  { id: "2", title: "订阅即将到期", description: "您的企业版订阅将在 3 天后到期，请及时续费。", type: "warning", time: "1小时前", read: false },
-  { id: "3", title: "算力点数不足", description: "当前可用点数不足 100，部分排期任务可能受阻。", type: "error", time: "3小时前", read: true },
-  { id: "4", title: "新模板上架", description: "素材市场新增了 12 款针对 618 大促的爆款模板。", type: "info", time: "1天前", read: true },
-];
+function isReadNotification(item: NotificationFeedItem, readIds: Set<string>) {
+  return readIds.has(item.id) || item.status.toLowerCase() === "read";
+}
+
+function getNotificationIcon(item: NotificationFeedItem) {
+  if (item.source === "discovery") {
+    return <Store className="w-4 h-4 text-blue-500" />;
+  }
+
+  if (["content.approved", "content.published", "task.completed"].includes(item.event)) {
+    return <Video className="w-4 h-4 text-emerald-500" />;
+  }
+
+  if (["content.rejected", "content.changes_requested", "task.failed"].includes(item.event)) {
+    return <AlertCircle className="w-4 h-4 text-destructive" />;
+  }
+
+  if (["credit.low", "subscription.expiring"].includes(item.event)) {
+    return <Zap className="w-4 h-4 text-orange-500" />;
+  }
+
+  return <Bell className="w-4 h-4 text-blue-500" />;
+}
 
 export function NotificationCenter() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => !isReadNotification(item, readIds)).length,
+    [notifications, readIds],
+  );
 
   useEffect(() => {
-    const unsub = wsManager.on("notification", (data) => {
-      const newNotif: Notification = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: "系统通知",
-        description: data.message,
-        type: "info",
-        time: "刚刚",
-        read: false
-      };
-      setNotifications(prev => [newNotif, ...prev]);
+    let active = true;
+
+    const loadNotifications = async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) {
+        setLoading(true);
+      }
+
+      try {
+        const response = await api.settings.notifications.listFeed({ limit: 12 });
+        if (!active) {
+          return;
+        }
+
+        const items = Array.isArray(response.data) ? response.data : response.data.items;
+        setNotifications(items);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+
+        setError(readApiErrorMessage(loadError, "通知加载失败"));
+      } finally {
+        if (active && !silent) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadNotifications();
+
+    const interval = window.setInterval(() => {
+      void loadNotifications({ silent: true });
+    }, 60_000);
+
+    const offNotification = wsManager.on("notification", () => {
+      void loadNotifications({ silent: true });
     });
-    return unsub;
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      offNotification();
+    };
   }, []);
 
   const markAllRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    setReadIds(new Set(notifications.map((item) => item.id)));
   };
 
   const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
-  };
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case "success": return <Video className="w-4 h-4 text-emerald-500" />;
-      case "error": return <AlertCircle className="w-4 h-4 text-destructive" />;
-      case "warning": return <Zap className="w-4 h-4 text-orange-500" />;
-      default: return <Store className="w-4 h-4 text-blue-500" />;
-    }
+    setReadIds((current) => {
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -97,35 +159,51 @@ export function NotificationCenter() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <ScrollArea className="h-[400px]">
-          {notifications.length > 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Bell className="w-8 h-8 mb-2 opacity-20" />
+              <p className="text-sm">正在加载通知...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground px-6 text-center">
+              <AlertCircle className="w-8 h-8 opacity-40" />
+              <p className="text-sm">{error}</p>
+            </div>
+          ) : notifications.length > 0 ? (
             <div className="flex flex-col">
-              {notifications.map((n) => (
-                <DropdownMenuItem 
-                  key={n.id} 
-                  className={`flex items-start gap-4 p-4 cursor-pointer focus:bg-muted/50 ${!n.read ? "bg-primary/5" : ""}`}
-                  onClick={() => markAsRead(n.id)}
-                >
-                  <div className="mt-1 flex-shrink-0">
-                    {getIcon(n.type)}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <p className={`text-sm font-semibold leading-none ${!n.read ? "text-foreground" : "text-muted-foreground"}`}>
-                        {n.title}
-                      </p>
-                      <span className="text-[10px] text-muted-foreground">{n.time}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                      {n.description}
-                    </p>
-                  </div>
-                  {!n.read && (
+              {notifications.map((notification) => {
+                const read = isReadNotification(notification, readIds);
+
+                return (
+                  <DropdownMenuItem
+                    key={notification.id}
+                    className={`flex items-start gap-4 p-4 cursor-pointer focus:bg-muted/50 ${!read ? "bg-primary/5" : ""}`}
+                    onClick={() => markAsRead(notification.id)}
+                  >
                     <div className="mt-1 flex-shrink-0">
-                      <Circle className="w-2 h-2 fill-primary text-primary" />
+                      {getNotificationIcon(notification)}
                     </div>
-                  )}
-                </DropdownMenuItem>
-              ))}
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className={`text-sm font-semibold leading-none ${!read ? "text-foreground" : "text-muted-foreground"}`}>
+                          {notification.title}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          {formatNotificationTime(notification.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {notification.content || "暂无详细内容"}
+                      </p>
+                    </div>
+                    {!read && (
+                      <div className="mt-1 flex-shrink-0">
+                        <Circle className="w-2 h-2 fill-primary text-primary" />
+                      </div>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

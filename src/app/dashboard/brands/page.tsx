@@ -38,7 +38,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   api,
-  isApiNotFoundError,
   readApiErrorMessage,
   type Brand,
 } from "@/lib/api";
@@ -97,14 +96,11 @@ export default function BrandsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [comingSoon, setComingSoon] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createComingSoon, setCreateComingSoon] = useState(false);
-  const [logoUploadComingSoon, setLogoUploadComingSoon] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
@@ -116,18 +112,13 @@ export default function BrandsPage() {
     }
 
     setError(null);
-    setComingSoon(false);
 
     try {
       const response = await api.brand.list();
       setBrands(response.data);
     } catch (loadError) {
       setBrands([]);
-      if (isApiNotFoundError(loadError)) {
-        setComingSoon(true);
-      } else {
-        setError(readApiErrorMessage(loadError, "品牌列表加载失败，请稍后重试。"));
-      }
+      setError(readApiErrorMessage(loadError, "品牌列表加载失败，请稍后重试。"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -144,8 +135,6 @@ export default function BrandsPage() {
 
   const resetCreateState = () => {
     setCreateError(null);
-    setCreateComingSoon(false);
-    setLogoUploadComingSoon(false);
     setForm(DEFAULT_FORM);
     setLogoFile(null);
   };
@@ -158,8 +147,6 @@ export default function BrandsPage() {
 
     setIsSubmitting(true);
     setCreateError(null);
-    setCreateComingSoon(false);
-    setLogoUploadComingSoon(false);
 
     try {
       const response = await api.brand.create({
@@ -173,11 +160,7 @@ export default function BrandsPage() {
         try {
           await api.brand.uploadAsset(response.data.id, logoFile, "logo");
         } catch (uploadError) {
-          if (isApiNotFoundError(uploadError)) {
-            setLogoUploadComingSoon(true);
-          } else {
-            toast.error(readApiErrorMessage(uploadError, "品牌已创建，但 Logo 上传失败。"));
-          }
+          toast.error(readApiErrorMessage(uploadError, "品牌已创建，但 Logo 上传失败。"));
         }
       }
 
@@ -186,11 +169,7 @@ export default function BrandsPage() {
       resetCreateState();
       void loadBrands({ silent: true });
     } catch (submitError) {
-      if (isApiNotFoundError(submitError)) {
-        setCreateComingSoon(true);
-      } else {
-        setCreateError(readApiErrorMessage(submitError, "品牌创建失败，请稍后重试。"));
-      }
+      setCreateError(readApiErrorMessage(submitError, "品牌创建失败，请稍后重试。"));
     } finally {
       setIsSubmitting(false);
     }
@@ -244,17 +223,6 @@ export default function BrandsPage() {
           title="品牌列表加载失败"
           description={error}
           onRetry={() => {
-            void loadBrands();
-          }}
-          className="border-white/10 bg-black/20"
-        />
-      ) : comingSoon ? (
-        <EmptyState
-          icon={Building2}
-          title="品牌管理即将上线"
-          description="品牌列表接口在当前环境尚未开放，页面已经切到真实 API 模式，后端准备好后会直接展示真实品牌。"
-          actionLabel="重新加载"
-          onAction={() => {
             void loadBrands();
           }}
           className="border-white/10 bg-black/20"
@@ -359,19 +327,7 @@ export default function BrandsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {createComingSoon ? (
-            <EmptyState
-              icon={Building2}
-              title="品牌创建接口即将上线"
-              description="当前环境还未开放 `brand/create`，后端准备好后这里会直接提交真实创建请求。"
-              actionLabel="关闭弹窗"
-              onAction={() => {
-                setIsCreateOpen(false);
-              }}
-              className="border-white/10 bg-black/20 py-12"
-            />
-          ) : (
-            <div className="space-y-5 py-2">
+          <div className="space-y-5 py-2">
               <div className="space-y-2">
                 <Label htmlFor="brand-name">品牌名称</Label>
                 <Input
@@ -408,7 +364,6 @@ export default function BrandsPage() {
                   onChange={(event) => {
                     const nextFile = event.target.files?.[0] || null;
                     setLogoFile(nextFile);
-                    setLogoUploadComingSoon(false);
                   }}
                 />
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-slate-400">
@@ -416,19 +371,12 @@ export default function BrandsPage() {
                 </div>
               </div>
 
-              {logoUploadComingSoon ? (
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                  品牌已经创建成功，但当前环境尚未开放 Logo 上传接口，后续可在品牌资产页继续补传。
-                </div>
-              ) : null}
-
               {createError ? (
                 <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                   {createError}
                 </div>
               ) : null}
             </div>
-          )}
 
           <DialogFooter className="border-white/10 bg-slate-900/80">
             <Button
@@ -445,7 +393,7 @@ export default function BrandsPage() {
               onClick={() => {
                 void handleCreateBrand();
               }}
-              disabled={isSubmitting || createComingSoon}
+              disabled={isSubmitting}
             >
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               创建品牌

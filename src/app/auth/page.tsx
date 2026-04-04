@@ -22,13 +22,12 @@ export default function AuthPage() {
   const [isLoginVerifying, setIsLoginVerifying] = useState(false);
   const [isRegisterSendingCode, setIsRegisterSendingCode] = useState(false);
   const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
+  const [isWechatRedirecting, setIsWechatRedirecting] = useState(false);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [timer, setTimer] = useState(0);
-  const [mockCode, setMockCode] = useState<string | null>(null);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [registerTimer, setRegisterTimer] = useState(0);
-  const [registerMockCode, setRegisterMockCode] = useState<string | null>(null);
   const [registerForm, setRegisterForm] = useState({
     orgName: "",
     industry: "",
@@ -71,18 +70,11 @@ export default function AuthPage() {
 
     setIsLoginSendingCode(true);
     try {
-      const sendRes = await api.auth.sendCode(phone);
+      await api.auth.sendCode(phone);
       startTimer();
-      if ((sendRes.data as Record<string, unknown>)?.code) {
-        const testCode = (sendRes.data as Record<string, unknown>).code as string;
-        setMockCode(testCode);
-        setCode(testCode);
-        toast.success(`[测试模式] 验证码已自动填入: ${testCode}`);
-      } else {
-        toast.success(`验证码已发送至 ${phone}`);
-      }
+      toast.success(`验证码已发送至 ${phone}`);
     } catch (err) {
-      console.error("Failed to send SMS code:", err);
+      toast.error(err instanceof Error ? err.message : "验证码发送失败，请稍后重试");
     } finally {
       setIsLoginSendingCode(false);
     }
@@ -111,7 +103,7 @@ export default function AuthPage() {
       toast.success(isNewUser ? "注册成功，欢迎使用！" : "欢迎回来！");
       router.push(isNewUser ? "/dashboard/onboarding" : "/dashboard");
     } catch (err) {
-      console.error("Failed to verify SMS code:", err);
+      toast.error(err instanceof Error ? err.message : "验证码校验失败，请稍后重试");
     } finally {
       setIsLoginVerifying(false);
     }
@@ -125,18 +117,11 @@ export default function AuthPage() {
 
     setIsRegisterSendingCode(true);
     try {
-      const sendRes = await api.auth.sendCode(registerForm.adminPhone);
+      await api.auth.sendCode(registerForm.adminPhone);
       startRegisterTimer();
-      if ((sendRes.data as Record<string, unknown>)?.code) {
-        const testCode = (sendRes.data as Record<string, unknown>).code as string;
-        setRegisterMockCode(testCode);
-        updateRegisterForm("code", testCode);
-        toast.success(`[测试模式] 验证码已自动填入: ${testCode}`);
-      } else {
-        toast.success(`验证码已发送至 ${registerForm.adminPhone}`);
-      }
+      toast.success(`验证码已发送至 ${registerForm.adminPhone}`);
     } catch (err) {
-      console.error("Failed to send enterprise SMS code:", err);
+      toast.error(err instanceof Error ? err.message : "企业验证码发送失败，请稍后重试");
     } finally {
       setIsRegisterSendingCode(false);
     }
@@ -176,14 +161,31 @@ export default function AuthPage() {
       toast.success("企业空间创建成功");
       router.push("/dashboard");
     } catch (err) {
-      console.error("Failed to register enterprise:", err);
+      toast.error(err instanceof Error ? err.message : "企业空间创建失败，请稍后重试");
     } finally {
       setIsRegisterSubmitting(false);
     }
   };
 
-  const handleWeChatLogin = () => {
-    toast.info("微信登录暂未开放，请先使用短信验证码登录");
+  const handleWeChatLogin = async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setIsWechatRedirecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/auth/wechat/callback`;
+      const response = await api.auth.getWechatLoginUrl(redirectUri, "mediaclaw-web");
+      const loginUrl = response.data.redirectUrl || response.data.url;
+      if (!loginUrl) {
+        throw new Error("微信登录地址生成失败");
+      }
+
+      window.location.assign(loginUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "微信登录暂不可用");
+      setIsWechatRedirecting(false);
+    }
   };
 
   return (
@@ -296,10 +298,17 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                <Button type="button" variant="outline" className="h-12 w-full text-foreground" onClick={handleWeChatLogin}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full text-foreground"
+                  onClick={() => void handleWeChatLogin()}
+                  disabled={isWechatRedirecting}
+                >
                   <svg className="mr-2 h-5 w-5 fill-[#07C160]" viewBox="0 0 24 24">
                     <path d="M8.225 3.518c-4.482 0-8.117 3.257-8.117 7.276 0 2.21 1.107 4.183 2.85 5.568-.158.577-1.026 2.05-1.066 2.12-.04.07-.028.163.03.22.035.035.093.06.15.06h.058c.07 0 2.378-.455 3.322-.922.88.243 1.81.378 2.773.378.11 0 .22-.004.332-.01-4.14-.383-7.406-3.418-7.406-7.143 0-3.95 3.69-7.152 8.24-7.152 4.55 0 8.24 3.202 8.24 7.152 0 .546-.07 1.074-.202 1.577 1.07.72 1.83 1.765 2.14 2.96.26-.64.407-1.343.407-2.078 0-5.51-5.188-9.978-11.583-9.978zm10.375 7.97c-3.64 0-6.59 2.645-6.59 5.908 0 1.795.898 3.398 2.314 4.522-.128.47-.833 1.666-.865 1.723-.033.056-.023.132.025.178.028.028.075.048.122.048h.047c.057 0 1.93-.37 2.698-.75.714.198 1.47.307 2.25.307 3.64 0 6.59-2.645 6.59-5.908s-2.95-5.908-6.59-5.908z" />
                   </svg>
+                  {isWechatRedirecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   微信登录
                 </Button>
               </TabsContent>

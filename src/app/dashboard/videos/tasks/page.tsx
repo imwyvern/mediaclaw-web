@@ -20,8 +20,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MetadataUpdater } from "@/components/metadata-updater";
-import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { api, readApiErrorMessage } from "@/lib/api";
 import Link from "next/link";
 
 type TaskStatus = "queued" | "processing" | "completed" | "failed";
@@ -39,21 +40,17 @@ interface ProductionTask {
 export default function VideoTasksPage() {
   const [tasks, setTasks] = useState<ProductionTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchSearchQuery] = useState("");
 
   const fetchTasks = async () => {
     try {
       const res = await api.tasks.list();
       setTasks(res.data);
+      setError(null);
     } catch (err) {
-      console.error("Failed to fetch tasks:", err);
-      // Fallback mock
-      setTasks([
-        { id: "task_1", title: "Q3 Hero Video Variant A", status: "processing", progress: 45, createdAt: "2026-03-30 10:00", brandName: "Acme Corp" },
-        { id: "task_2", title: "Product Demo Reel", status: "queued", progress: 0, createdAt: "2026-03-30 10:15", brandName: "Global Inc" },
-        { id: "task_3", title: "Customer Testimonial #4", status: "completed", progress: 100, createdAt: "2026-03-30 09:30", brandName: "Acme Corp" },
-        { id: "task_4", title: "Instagram Ad Pack", status: "failed", progress: 12, createdAt: "2026-03-30 08:00", brandName: "Alpha", error: "Material format error" },
-      ]);
+      setTasks([]);
+      setError(readApiErrorMessage(err, "生产任务加载失败，请稍后重试。"));
     } finally {
       setLoading(false);
     }
@@ -123,6 +120,34 @@ export default function VideoTasksPage() {
             <div className="space-y-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
+          ) : error ? (
+            <ErrorState
+              title="生产任务加载失败"
+              description={error}
+              onRetry={() => {
+                setLoading(true);
+                void fetchTasks();
+              }}
+            />
+          ) : filteredTasks.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title={tasks.length === 0 ? "还没有生产任务" : "未找到相关生产任务"}
+              description={
+                tasks.length === 0
+                  ? "新建视频任务后，这里会实时展示排队、处理、完成和失败状态。"
+                  : "请调整搜索关键词，或刷新任务列表后重试。"
+              }
+              actionLabel={tasks.length === 0 ? "新建任务" : "刷新列表"}
+              onAction={() => {
+                if (tasks.length === 0) {
+                  window.location.href = "/dashboard/videos/create";
+                  return;
+                }
+                setLoading(true);
+                void fetchTasks();
+              }}
+            />
           ) : (
             <div className="rounded-md border overflow-hidden">
               <Table>
@@ -170,13 +195,6 @@ export default function VideoTasksPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {filteredTasks.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                        未找到相关生产任务
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </div>
