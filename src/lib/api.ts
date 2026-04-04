@@ -246,6 +246,57 @@ export interface AuthResponse {
   isNewUser: boolean;
 }
 
+export type ClawHostInstanceLifecycleStatus =
+  | "creating"
+  | "pending_manual_setup"
+  | "running"
+  | "stopped"
+  | "error"
+  | "upgrading";
+
+export interface ClawHostInstanceConfigRecord {
+  cpu: string;
+  memory: string;
+  storage: string;
+}
+
+export interface ClawHostInstalledSkillRecord {
+  skillId: string;
+  version: string;
+  installedAt?: string;
+}
+
+export interface ClawHostHealthStatusRecord {
+  lastCheck?: string | null;
+  isHealthy: boolean;
+  latency: number;
+}
+
+export interface ClawHostInstanceRecord {
+  id: string;
+  instanceId: string;
+  orgId: string;
+  clientName: string;
+  status: ClawHostInstanceLifecycleStatus;
+  config: ClawHostInstanceConfigRecord;
+  skills: ClawHostInstalledSkillRecord[];
+  healthStatus: ClawHostHealthStatusRecord;
+  k8sNamespace: string;
+  k8sPodName: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ClawHostInstanceListResponse {
+  items: ClawHostInstanceRecord[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export type DiscoveryPlatform = "douyin" | "xhs" | "kuaishou" | "bilibili";
 
 export interface DiscoveryPoolParams {
@@ -1435,6 +1486,68 @@ function normalizeAccountSnapshot(raw: unknown): AccountSnapshot {
   };
 }
 
+function normalizeClawHostHealthStatus(raw: unknown): ClawHostHealthStatusRecord {
+  const record = objectValue(raw) || {};
+
+  return {
+    lastCheck: stringOrUndefined(record.lastCheck) ?? null,
+    isHealthy: booleanValue(record.isHealthy),
+    latency: numberValue(record.latency),
+  };
+}
+
+function normalizeClawHostInstalledSkill(raw: unknown): ClawHostInstalledSkillRecord {
+  const record = objectValue(raw) || {};
+
+  return {
+    skillId: stringValue(record.skillId),
+    version: stringValue(record.version, "latest"),
+    installedAt: stringOrUndefined(record.installedAt),
+  };
+}
+
+function normalizeClawHostInstance(raw: unknown): ClawHostInstanceRecord {
+  const record = objectValue(raw) || {};
+
+  return {
+    id: extractId(record, "clawhost_instance"),
+    instanceId: stringValue(record.instanceId),
+    orgId: stringValue(record.orgId),
+    clientName: stringValue(record.clientName, "OpenClaw Instance"),
+    status: stringValue(record.status, "pending_manual_setup") as ClawHostInstanceLifecycleStatus,
+    config: {
+      cpu: stringValue(objectValue(record.config)?.cpu, ""),
+      memory: stringValue(objectValue(record.config)?.memory, ""),
+      storage: stringValue(objectValue(record.config)?.storage, ""),
+    },
+    skills: arrayValue(record.skills).map((item) => normalizeClawHostInstalledSkill(item)),
+    healthStatus: normalizeClawHostHealthStatus(record.healthStatus),
+    k8sNamespace: stringValue(record.k8sNamespace),
+    k8sPodName: stringValue(record.k8sPodName),
+    createdAt: stringOrUndefined(record.createdAt),
+    updatedAt: stringOrUndefined(record.updatedAt),
+  };
+}
+
+function normalizeClawHostInstanceList(raw: unknown): ClawHostInstanceListResponse {
+  const record = objectValue(raw) || {};
+  const pagination = objectValue(record.pagination) || {};
+  const items = arrayValue(record.items).map((item) => normalizeClawHostInstance(item));
+
+  return {
+    items,
+    pagination: {
+      page: numberValue(pagination.page ?? record.page, 1),
+      limit: numberValue(pagination.limit ?? record.limit, items.length || 10),
+      total: numberValue(pagination.total ?? record.total, items.length),
+      totalPages: numberValue(
+        pagination.totalPages,
+        items.length > 0 ? Math.ceil(numberValue(pagination.total ?? record.total, items.length) / Math.max(numberValue(pagination.limit ?? record.limit, items.length || 10), 1)) : 0,
+      ),
+    },
+  };
+}
+
 function normalizePaymentProduct(raw: unknown): PaymentProduct {
   const record = objectValue(raw) || {};
   const unitAmount = numberValue(record.unitAmount);
@@ -2549,6 +2662,68 @@ const skillApi = {
     request({ url: "/v1/skill/feedback", method: "POST", data }),
 };
 
+const clawhostApi = {
+  list: async (params?: {
+    status?: ClawHostInstanceLifecycleStatus;
+    page?: number;
+    limit?: number;
+  }) =>
+    toResult(
+      normalizeClawHostInstanceList(
+        await requestData({
+          url: "/v1/clawhost/instances",
+          params: compactObject(params || {}),
+        }),
+      ),
+    ),
+  get: async (instanceId: string) =>
+    toResult(
+      normalizeClawHostInstance(
+        await requestData({
+          url: `/v1/clawhost/instances/${instanceId}`,
+        }),
+      ),
+    ),
+  status: async (instanceId: string) =>
+    toResult(
+      await requestData<{
+        instanceId: string;
+        status: ClawHostInstanceLifecycleStatus;
+        healthStatus: ClawHostHealthStatusRecord;
+      }>({
+        url: `/v1/clawhost/instances/${instanceId}/status`,
+      }),
+    ),
+  create: async (data: {
+    clientName: string;
+    config: ClawHostInstanceConfigRecord;
+  }) =>
+    toResult(
+      normalizeClawHostInstance(
+        await requestData({
+          url: "/v1/clawhost/instances",
+          method: "POST",
+          data,
+        }),
+      ),
+    ),
+  installSkill: (instanceId: string, data: { skillId: string; version: string }) =>
+    request<{
+      instanceId: string;
+      skill: ClawHostInstalledSkillRecord | null;
+      installedSkills: number;
+    }>({
+      url: `/v1/clawhost/instances/${instanceId}/skills`,
+      method: "POST",
+      data,
+    }),
+  uninstallSkill: (instanceId: string, skillId: string) =>
+    request<{ instanceId: string; removedSkillId: string; installedSkills: number }>({
+      url: `/v1/clawhost/instances/${instanceId}/skills/${skillId}`,
+      method: "DELETE",
+    }),
+};
+
 const authApi = {
   sendCode: (phone: string) => request({ url: "/v1/auth/sms/send", method: "POST", data: { phone } }),
   verifyCode: (phone: string, code: string) =>
@@ -2605,6 +2780,7 @@ export const api = {
   campaigns: campaignsApi,
   discovery: discoveryApi,
   skill: skillApi,
+  clawhost: clawhostApi,
   auth: authApi,
 };
 

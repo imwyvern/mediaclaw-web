@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   BellRing,
+  Bot,
   CheckCircle2,
   Copy,
   Key,
@@ -36,14 +37,23 @@ import { MetadataUpdater } from "@/components/metadata-updater";
 import {
   api,
   type ApiKeyRecord,
+  type ClawHostInstanceRecord,
   type NotificationChannel,
   type User,
   type WebhookRecord,
 } from "@/lib/api";
+import {
+  DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+  formatOpenClawStatus,
+  hasOpenClawSkill,
+  OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
+  OPENCLAW_MEDIACLAW_CLIENT_VERSION,
+  resolveOpenClawClientName,
+} from "@/lib/openclaw";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
 
-type SettingsTab = "profile" | "api" | "webhooks" | "notifications";
+type SettingsTab = "profile" | "api" | "webhooks" | "notifications" | "openclaw";
 type AsyncStatus = "idle" | "loading" | "success" | "error";
 
 interface ApiKeyFormState {
@@ -264,6 +274,13 @@ export default function SettingsPage() {
   const [savingNotificationKey, setSavingNotificationKey] = useState<string | null>(null);
   const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
 
+  const [openClawStatus, setOpenClawStatus] = useState<AsyncStatus>("idle");
+  const [openClawError, setOpenClawError] = useState<string | null>(null);
+  const [openClawInstance, setOpenClawInstance] = useState<ClawHostInstanceRecord | null>(null);
+  const [openClawAction, setOpenClawAction] = useState<"install" | "uninstall" | null>(null);
+  const currentUser = accountInfo ?? storedUser;
+  const mediaclawClientInstalled = hasOpenClawSkill(openClawInstance);
+
   function syncAuthStore(nextUser: User) {
     const nextToken = storedToken || readAuthTokenFromCookies();
     if (nextToken) {
@@ -341,6 +358,40 @@ export default function SettingsPage() {
     }
   }
 
+  async function loadOpenClaw() {
+    setOpenClawStatus("loading");
+    setOpenClawError(null);
+
+    try {
+      const response = await api.clawhost.list({ page: 1, limit: 1 });
+      const latestInstance = response.data.items[0] ?? null;
+
+      if (!latestInstance) {
+        setOpenClawInstance(null);
+        setOpenClawStatus("success");
+        return;
+      }
+
+      try {
+        const statusResponse = await api.clawhost.status(latestInstance.instanceId);
+        setOpenClawInstance({
+          ...latestInstance,
+          status: statusResponse.data.status,
+          healthStatus: statusResponse.data.healthStatus,
+        });
+      } catch {
+        setOpenClawInstance(latestInstance);
+      }
+
+      setOpenClawStatus("success");
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to load OpenClaw status.");
+      setOpenClawError(message);
+      setOpenClawStatus("error");
+      toast.error("加载 OpenClaw 状态失败", { description: message });
+    }
+  }
+
   useEffect(() => {
     void loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,7 +409,11 @@ export default function SettingsPage() {
     if (activeTab === "notifications" && notificationsStatus === "idle") {
       void loadNotifications();
     }
-  }, [activeTab, apiKeysStatus, notificationsStatus, webhooksStatus]);
+
+    if (activeTab === "openclaw" && openClawStatus === "idle") {
+      void loadOpenClaw();
+    }
+  }, [activeTab, apiKeysStatus, notificationsStatus, openClawStatus, webhooksStatus]);
 
   async function handleCopy(value: string, label: string) {
     if (!value) {
@@ -625,7 +680,83 @@ export default function SettingsPage() {
     }
   }
 
-  const currentUser = accountInfo ?? storedUser;
+  async function syncOpenClawInstance(instanceId: string) {
+    const instanceResponse = await api.clawhost.get(instanceId);
+
+    try {
+      const statusResponse = await api.clawhost.status(instanceId);
+      setOpenClawInstance({
+        ...instanceResponse.data,
+        status: statusResponse.data.status,
+        healthStatus: statusResponse.data.healthStatus,
+      });
+    } catch {
+      setOpenClawInstance(instanceResponse.data);
+    }
+
+    setOpenClawStatus("success");
+  }
+
+  async function ensureOpenClawInstance() {
+    if (openClawInstance) {
+      return openClawInstance;
+    }
+
+    const response = await api.clawhost.create({
+      clientName: resolveOpenClawClientName([
+        currentUser?.name,
+        currentUser?.phone,
+      ]),
+      config: DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+    });
+
+    setOpenClawInstance(response.data);
+    return response.data;
+  }
+
+  async function handleInstallOpenClawSkill() {
+    setOpenClawAction("install");
+
+    try {
+      const instance = await ensureOpenClawInstance();
+      await api.clawhost.installSkill(instance.instanceId, {
+        skillId: OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
+        version: OPENCLAW_MEDIACLAW_CLIENT_VERSION,
+      });
+      await syncOpenClawInstance(instance.instanceId);
+      toast.success("OpenClaw 已启用", {
+        description: "mediaclaw-client 技能已安装完成。",
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to enable OpenClaw.");
+      toast.error("启用 OpenClaw 失败", { description: message });
+    } finally {
+      setOpenClawAction(null);
+    }
+  }
+
+  async function handleUninstallOpenClawSkill() {
+    if (!openClawInstance) {
+      toast.error("当前没有可操作的 OpenClaw 实例");
+      return;
+    }
+
+    setOpenClawAction("uninstall");
+
+    try {
+      await api.clawhost.uninstallSkill(
+        openClawInstance.instanceId,
+        OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
+      );
+      await syncOpenClawInstance(openClawInstance.instanceId);
+      toast.success("mediaclaw-client 已卸载");
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to uninstall OpenClaw skill.");
+      toast.error("卸载 OpenClaw 技能失败", { description: message });
+    } finally {
+      setOpenClawAction(null);
+    }
+  }
 
   return (
     <div className="flex max-w-5xl flex-col gap-8 animate-in fade-in duration-500">
@@ -655,6 +786,9 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="notifications" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
             <BellRing className="h-4 w-4" /> Notifications
+          </TabsTrigger>
+          <TabsTrigger value="openclaw" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
+            <Bot className="h-4 w-4" /> OpenClaw
           </TabsTrigger>
         </TabsList>
 
@@ -1226,6 +1360,205 @@ export default function SettingsPage() {
                         </Card>
                       );
                     })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="openclaw" className="mt-0 space-y-6">
+            <Card className="border-white/10 bg-zinc-950/60">
+              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-white">OpenClaw 集成</CardTitle>
+                  <CardDescription>
+                    查看实例状态、管理 `mediaclaw-client` 技能，并确认当前连接信息。
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void loadOpenClaw()}>
+                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> 刷新状态
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {openClawStatus === "loading" ? (
+                  <SectionSkeleton blocks={1} />
+                ) : openClawStatus === "error" ? (
+                  <ErrorState
+                    title="OpenClaw 不可用"
+                    description={openClawError ?? "加载 OpenClaw 状态失败。"}
+                    onRetry={() => void loadOpenClaw()}
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : !openClawInstance ? (
+                  <EmptyState
+                    icon={Bot}
+                    title="尚未开通 OpenClaw"
+                    description="点击下方按钮即可创建实例并安装 mediaclaw-client，后续的 AI 助手能力会直接挂载到当前企业账号。"
+                    actionLabel={openClawAction === "install" ? "开通中..." : "一键开通并安装"}
+                    onAction={() => void handleInstallOpenClawSkill()}
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">实例状态</div>
+                        <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-white">
+                          <CheckCircle2 className="h-4 w-4" />
+                          {formatOpenClawStatus(openClawInstance.status)}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          最近检查 {formatDateTime(openClawInstance.healthStatus.lastCheck || undefined)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">技能状态</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {mediaclawClientInstalled ? "mediaclaw-client 已安装" : "mediaclaw-client 未安装"}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          当前共安装 {openClawInstance.skills.length} 个技能
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">健康延迟</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {openClawInstance.healthStatus.latency} ms
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          健康状态 {openClawInstance.healthStatus.isHealthy ? "正常" : "待人工配置或异常"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={() =>
+                          mediaclawClientInstalled
+                            ? void handleUninstallOpenClawSkill()
+                            : void handleInstallOpenClawSkill()
+                        }
+                        disabled={openClawAction !== null}
+                      >
+                        {openClawAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {mediaclawClientInstalled ? "卸载 mediaclaw-client" : "一键安装 mediaclaw-client"}
+                      </Button>
+                      <Button variant="outline" onClick={() => void loadOpenClaw()} disabled={openClawAction !== null}>
+                        刷新实例详情
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-zinc-950/60">
+              <CardHeader>
+                <CardTitle className="text-white">已安装技能</CardTitle>
+                <CardDescription>这里展示当前实例返回的真实技能清单。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!openClawInstance ? (
+                  <EmptyState
+                    icon={Bot}
+                    title="暂无实例技能"
+                    description="实例开通后，这里会展示当前已安装技能和版本。"
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : openClawInstance.skills.length === 0 ? (
+                  <EmptyState
+                    icon={Bot}
+                    title="当前未安装任何技能"
+                    description="你可以使用上方按钮一键安装 mediaclaw-client。"
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {openClawInstance.skills.map((skill) => (
+                      <div key={skill.skillId} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-white">{skill.skillId}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              安装时间 {formatDateTime(skill.installedAt)}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="border-white/10 text-zinc-300">
+                            {skill.version}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-zinc-950/60">
+              <CardHeader>
+                <CardTitle className="text-white">实例连接信息</CardTitle>
+                <CardDescription>供排障和后续集成时复制使用。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!openClawInstance ? (
+                  <EmptyState
+                    icon={Bot}
+                    title="暂无连接信息"
+                    description="创建实例后，这里会显示实例 ID、命名空间和 Pod 信息。"
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>实例 ID</Label>
+                      <div className="flex">
+                        <Input value={openClawInstance.instanceId} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
+                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.instanceId, "实例 ID")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>客户端名称</Label>
+                      <Input value={openClawInstance.clientName} readOnly className="bg-black/20" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>K8s Namespace</Label>
+                      <div className="flex">
+                        <Input value={openClawInstance.k8sNamespace} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
+                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.k8sNamespace, "Namespace")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>K8s Pod</Label>
+                      <div className="flex">
+                        <Input value={openClawInstance.k8sPodName} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
+                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.k8sPodName, "Pod 名称")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>CPU</Label>
+                      <Input value={openClawInstance.config.cpu} readOnly className="bg-black/20" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>内存 / 存储</Label>
+                      <Input
+                        value={`${openClawInstance.config.memory} / ${openClawInstance.config.storage}`}
+                        readOnly
+                        className="bg-black/20"
+                      />
+                    </div>
                   </div>
                 )}
               </CardContent>

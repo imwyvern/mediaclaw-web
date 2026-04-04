@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   type LucideIcon,
   ArrowRight,
+  Bot,
   BriefcaseBusiness,
   Check,
   ChevronLeft,
@@ -45,15 +46,25 @@ import {
   type AccountPack,
   type AccountSnapshot,
   type Brand,
+  type ClawHostInstanceRecord,
 } from "@/lib/api";
 import { formatCompactNumber, formatDate } from "@/lib/format";
+import {
+  DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+  formatOpenClawStatus,
+  hasOpenClawSkill,
+  OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
+  OPENCLAW_MEDIACLAW_CLIENT_VERSION,
+  resolveOpenClawClientName,
+} from "@/lib/openclaw";
 import { useAuthStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
+type OpenClawPreference = "enable" | "skip";
 
 interface IndustryOption {
   value: string;
@@ -99,8 +110,9 @@ const VIDEO_STYLE_OPTIONS = [
 const STEP_TITLES: Record<Step, string> = {
   1: "保存行业方向",
   2: "创建首个品牌",
-  3: "确认试用额度",
-  4: "进入控制台",
+  3: "启用 OpenClaw",
+  4: "确认试用额度",
+  5: "进入控制台",
 };
 
 async function fetchAccountSnapshot() {
@@ -357,20 +369,27 @@ export default function OnboardingPage() {
   const [brandName, setBrandName] = useState("");
   const [brandStyle, setBrandStyle] = useState("");
   const [createdBrand, setCreatedBrand] = useState<Brand | null>(null);
+  const [openClawPreference, setOpenClawPreference] = useState<OpenClawPreference>("enable");
+  const [openClawInstance, setOpenClawInstance] = useState<ClawHostInstanceRecord | null>(null);
 
   const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [openClawLoading, setOpenClawLoading] = useState(true);
+  const [openClawLoadError, setOpenClawLoadError] = useState<string | null>(null);
 
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [brandSubmitting, setBrandSubmitting] = useState(false);
+  const [openClawSubmitting, setOpenClawSubmitting] = useState(false);
   const [navigating, setNavigating] = useState(false);
 
   const [profileError, setProfileError] = useState<string | null>(null);
   const [brandError, setBrandError] = useState<string | null>(null);
+  const [openClawError, setOpenClawError] = useState<string | null>(null);
 
   const selectedIndustryOption = INDUSTRY_OPTIONS.find((item) => item.value === selectedIndustry) || null;
   const hasAccountData = accountSnapshot ? hasAccountSnapshotValue(accountSnapshot) : false;
+  const mediaclawClientInstalled = hasOpenClawSkill(openClawInstance);
 
   useEffect(() => {
     let cancelled = false;
@@ -397,6 +416,42 @@ export default function OnboardingPage() {
     };
 
     void loadInitialSnapshot();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOpenClawInstance = async () => {
+      setOpenClawLoading(true);
+      setOpenClawLoadError(null);
+
+      try {
+        const response = await api.clawhost.list({ page: 1, limit: 1 });
+        if (cancelled) {
+          return;
+        }
+
+        const latestInstance = response.data.items[0] ?? null;
+        setOpenClawInstance(latestInstance);
+        if (latestInstance) {
+          setOpenClawPreference("enable");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOpenClawLoadError(readApiErrorMessage(error, "OpenClaw 状态加载失败，请稍后重试。"));
+        }
+      } finally {
+        if (!cancelled) {
+          setOpenClawLoading(false);
+        }
+      }
+    };
+
+    void loadOpenClawInstance();
 
     return () => {
       cancelled = true;
@@ -483,6 +538,66 @@ export default function OnboardingPage() {
       setBrandError(readApiErrorMessage(error, "品牌创建失败，请稍后重试。"));
     } finally {
       setBrandSubmitting(false);
+    }
+  };
+
+  const refreshOpenClawInstance = async (instanceId: string) => {
+    const instanceResponse = await api.clawhost.get(instanceId);
+
+    try {
+      const statusResponse = await api.clawhost.status(instanceId);
+      setOpenClawInstance({
+        ...instanceResponse.data,
+        status: statusResponse.data.status,
+        healthStatus: statusResponse.data.healthStatus,
+      });
+    } catch {
+      setOpenClawInstance(instanceResponse.data);
+    }
+  };
+
+  const handleConfigureOpenClaw = async () => {
+    if (openClawPreference === "skip") {
+      setOpenClawError(null);
+      setStep(4);
+      return;
+    }
+
+    setOpenClawSubmitting(true);
+    setOpenClawError(null);
+
+    try {
+      let instance = openClawInstance;
+
+      if (!instance) {
+        const created = await api.clawhost.create({
+          clientName: resolveOpenClawClientName([
+            createdBrand?.name,
+            authUser?.orgId,
+            authUser?.name,
+            authUser?.phone,
+          ]),
+          config: DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+        });
+        instance = created.data;
+        setOpenClawInstance(instance);
+        toast.success("OpenClaw 实例已创建");
+      }
+
+      if (!hasOpenClawSkill(instance)) {
+        await api.clawhost.installSkill(instance.instanceId, {
+          skillId: OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
+          version: OPENCLAW_MEDIACLAW_CLIENT_VERSION,
+        });
+        toast.success("mediaclaw-client 技能已安装");
+      }
+
+      await refreshOpenClawInstance(instance.instanceId);
+      setStep(4);
+    } catch (error) {
+      setOpenClawError(readApiErrorMessage(error, "OpenClaw 启用失败，请稍后重试。"));
+    } finally {
+      setOpenClawSubmitting(false);
     }
   };
 
@@ -644,9 +759,136 @@ export default function OnboardingPage() {
       return (
         <GlassCard>
           <CardHeader className="pb-4">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100">
+              <Bot className="h-3.5 w-3.5" />
+              Step 3
+            </div>
+            <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+              是否启用 AI 助手（OpenClaw）
+            </CardTitle>
+            <CardDescription className="max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
+              启用后会直接创建 OpenClaw 实例，并为它安装 `mediaclaw-client` 技能；如果你只想先用 Web 面板，也可以稍后在设置里再开通。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setOpenClawPreference("enable")}
+                className={cn(
+                  "rounded-2xl border p-5 text-left transition-all duration-200",
+                  openClawPreference === "enable"
+                    ? "border-cyan-400/40 bg-cyan-500/12 shadow-[0_20px_50px_-34px_rgba(34,211,238,0.75)]"
+                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]",
+                )}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-base font-semibold text-white">启用 OpenClaw（推荐）</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-300/80">
+                      自动创建实例、安装客户端技能，并在后续设置页里持续查看运行状态与连接信息。
+                    </p>
+                  </div>
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-100">
+                    <Bot className="h-5 w-5" />
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOpenClawPreference("skip")}
+                className={cn(
+                  "rounded-2xl border p-5 text-left transition-all duration-200",
+                  openClawPreference === "skip"
+                    ? "border-white/25 bg-white/[0.08]"
+                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]",
+                )}
+              >
+                <div className="text-base font-semibold text-white">暂不启用，仅用 Web 面板</div>
+                <p className="mt-2 text-sm leading-6 text-slate-300/80">
+                  继续使用当前控制台流程，不创建 OpenClaw 实例。后续仍可在设置页一键开通。
+                </p>
+              </button>
+            </div>
+
+            {openClawLoading ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm text-slate-300">
+                正在检查当前账号下是否已有 OpenClaw 实例…
+              </div>
+            ) : null}
+
+            {!openClawLoading && openClawInstance ? (
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm uppercase tracking-[0.22em] text-emerald-200/80">OpenClaw Ready</div>
+                    <div className="mt-2 text-2xl font-black tracking-tight text-white">{openClawInstance.clientName}</div>
+                    <p className="mt-2 text-sm leading-6 text-emerald-50/80">
+                      当前状态：{formatOpenClawStatus(openClawInstance.status)}
+                      {mediaclawClientInstalled ? " · 已安装 mediaclaw-client" : " · 尚未安装 mediaclaw-client"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/15 px-3 py-2 text-xs text-emerald-50">
+                    {openClawInstance.instanceId}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {!openClawLoading && !openClawInstance && openClawLoadError ? (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-4 text-sm text-amber-50">
+                {openClawLoadError}
+              </div>
+            ) : null}
+
+            {openClawPreference === "enable" ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-5 text-sm leading-7 text-slate-300">
+                将按默认规格开通实例：CPU {DEFAULT_OPENCLAW_INSTANCE_CONFIG.cpu} · 内存 {DEFAULT_OPENCLAW_INSTANCE_CONFIG.memory} · 存储 {DEFAULT_OPENCLAW_INSTANCE_CONFIG.storage}。
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-5 text-sm leading-7 text-slate-300">
+                你当前选择仅使用 Web 面板，不会触发任何 OpenClaw 资源创建。
+              </div>
+            )}
+
+            {openClawError ? (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-red-100">
+                {openClawError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(2)}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                返回
+              </Button>
+              <Button
+                size="lg"
+                className="gap-2"
+                onClick={handleConfigureOpenClaw}
+                disabled={openClawSubmitting || openClawLoading}
+              >
+                {openClawSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                {openClawPreference === "enable"
+                  ? mediaclawClientInstalled
+                    ? "继续下一步"
+                    : "启用并继续"
+                  : "跳过并继续"}
+              </Button>
+            </div>
+          </CardContent>
+        </GlassCard>
+      );
+    }
+
+    if (step === 4) {
+      return (
+        <GlassCard>
+          <CardHeader className="pb-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-100">
               <Coins className="h-3.5 w-3.5" />
-              Step 3
+              Step 4
             </div>
             <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
               确认你的试用包与账户余额
@@ -742,11 +984,11 @@ export default function OnboardingPage() {
             ) : null}
 
             <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(2)}>
+              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(3)}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
                 返回
               </Button>
-              <Button size="lg" className="gap-2" onClick={() => setStep(4)} disabled={accountLoading || !accountSnapshot}>
+              <Button size="lg" className="gap-2" onClick={() => setStep(5)} disabled={accountLoading || !accountSnapshot}>
                 <ChevronRight className="h-4 w-4" />
                 继续
               </Button>
@@ -761,17 +1003,17 @@ export default function OnboardingPage() {
         <CardHeader className="pb-4">
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-100">
             <Check className="h-3.5 w-3.5" />
-            Step 4
+            Step 5
           </div>
           <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
             环境已经准备好
           </CardTitle>
           <CardDescription className="max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
-            行业信息已保存，品牌已创建，账户余额也已用真实快照确认。最后一步直接进入 `/dashboard`。
+            行业信息已保存，品牌已创建，OpenClaw 选择已确认，账户余额也已用真实快照确认。最后一步直接进入 `/dashboard`。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <MetricCard
               label="行业方向"
               value={selectedIndustryOption?.label || "未设置"}
@@ -783,6 +1025,18 @@ export default function OnboardingPage() {
               value={createdBrand?.name || "未创建"}
               hint="当前 onboarding 已调用品牌创建接口完成初始化。"
               icon={BriefcaseBusiness}
+            />
+            <MetricCard
+              label="OpenClaw"
+              value={openClawPreference === "skip" ? "暂不启用" : formatOpenClawStatus(openClawInstance?.status)}
+              hint={
+                openClawPreference === "skip"
+                  ? "当前账号将继续只使用 Web 控制台。"
+                  : mediaclawClientInstalled
+                    ? "已安装 mediaclaw-client，可在设置页继续管理。"
+                    : "实例已记录，可稍后在设置页继续补齐。"
+              }
+              icon={Bot}
             />
             <MetricCard
               label="当前余额"
@@ -797,7 +1051,7 @@ export default function OnboardingPage() {
           </div>
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(3)}>
+            <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(4)}>
               <ChevronLeft className="mr-2 h-4 w-4" />
               返回
             </Button>
@@ -813,7 +1067,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_28%),linear-gradient(180deg,#020617_0%,#0f172a_36%,#020617_100%)] text-white">
-      <MetadataUpdater title="欢迎加入" description="完成真实 onboarding，配置行业、品牌和试用额度。" />
+      <MetadataUpdater title="欢迎加入" description="完成真实 onboarding，配置行业、品牌、OpenClaw 和试用额度。" />
 
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -876,6 +1130,20 @@ export default function OnboardingPage() {
                 <StepStatusItem
                   step={3}
                   currentStep={step}
+                  title="OpenClaw 助手"
+                  description={
+                    openClawPreference === "skip"
+                      ? "当前选择仅使用 Web 面板。"
+                      : openClawInstance
+                        ? `${formatOpenClawStatus(openClawInstance.status)} · ${mediaclawClientInstalled ? "mediaclaw-client 已安装" : "等待安装技能"}`
+                        : openClawLoading
+                          ? "正在检查现有 OpenClaw 实例。"
+                          : openClawLoadError || "等待你决定是否启用 OpenClaw。"
+                  }
+                />
+                <StepStatusItem
+                  step={4}
+                  currentStep={step}
                   title="试用额度"
                   description={
                     accountSnapshot
@@ -886,7 +1154,7 @@ export default function OnboardingPage() {
                   }
                 />
                 <StepStatusItem
-                  step={4}
+                  step={5}
                   currentStep={step}
                   title="进入控制台"
                   description="完成最后确认后直接跳转到 dashboard。"
