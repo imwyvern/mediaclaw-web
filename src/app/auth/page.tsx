@@ -206,14 +206,14 @@ export default function AuthPage() {
 
           <div className="w-full rounded-[28px] border border-border/60 bg-card/95 p-4 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:p-6">
             <Tabs value={mode} className="w-full flex-col" onValueChange={(value) => setMode(value as "login" | "register")}>
-              <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
-                <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
-                  个人登录
-                </TabsTrigger>
-                <TabsTrigger value="register" className="rounded-lg text-sm font-medium transition-all">
-                  企业空间开通
-                </TabsTrigger>
-              </TabsList>
+                <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
+                  <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
+                    个人登录
+                  </TabsTrigger>
+                  <TabsTrigger value="register" className="rounded-lg text-sm font-medium transition-all">
+                    企业注册
+                  </TabsTrigger>
+                </TabsList>
 
               <TabsContent value="login" className="mt-0 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
                 <div className="mb-8 space-y-3">
@@ -315,18 +315,47 @@ export default function AuthPage() {
 
               <TabsContent value="register" className="mt-0 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
                 <div className="mb-8 space-y-3">
-                  <div className="inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs font-medium tracking-wide text-muted-foreground">
-                    企业账号注册
+                  <div className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/[0.08] px-3 py-1 text-xs font-medium tracking-wide text-primary">
+                    企业注册入口
                   </div>
                   <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">创建企业空间</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">企业注册</h1>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      为团队开通统一工作台，集中管理成员、素材与自动化工作流，提交完成后即可进入企业控制台。
+                      注册企业账号时，需要直接填写企业名称、所属行业和管理员手机号。完成短信验证后，会立即创建企业工作区。
                     </p>
                   </div>
                 </div>
 
                 <form className="space-y-6" onSubmit={handleRegister}>
+                  <section className="space-y-4 rounded-2xl border border-primary/20 bg-primary/[0.06] p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <h2 className="text-base font-semibold tracking-tight text-foreground">企业注册资料</h2>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          当前页是企业注册，不是个人账号补充资料。以下企业字段会在提交后直接用于初始化企业空间。
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 rounded-xl border border-primary/10 bg-background/80 p-3 text-sm text-foreground sm:grid-cols-3">
+                      <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">必填字段</p>
+                        <p className="mt-1 font-medium">企业名称</p>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">必填字段</p>
+                        <p className="mt-1 font-medium">所属行业</p>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">必填字段</p>
+                        <p className="mt-1 font-medium">管理员手机号</p>
+                      </div>
+                    </div>
+                  </section>
+
                   <section className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.18] p-3">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
