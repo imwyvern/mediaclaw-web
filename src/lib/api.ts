@@ -159,6 +159,13 @@ export interface Brand {
   orgId?: string;
   createdAt?: string;
   updatedAt?: string;
+  referenceImages?: string[];
+  slogans?: string[];
+  keywords?: string[];
+  prohibitedWords?: string[];
+  preferredDuration?: number;
+  aspectRatio?: string;
+  subtitleStyle?: Record<string, unknown>;
 }
 
 export interface CalendarTask {
@@ -439,6 +446,119 @@ export interface UsageSummary {
     endAt?: string;
     granularity?: string;
   };
+}
+
+export type ModelCapability = "chat" | "copy" | "frameEdit" | "videoGen" | "analysis";
+
+export interface ConversationQuotaSummary {
+  isUnlimited: boolean;
+  total: number | null;
+  used: number;
+  remaining: number | null;
+  usageRate: number;
+  warningLevel: "normal" | "warning" | "exceeded";
+}
+
+export interface ConversationModelUsage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+  records: number;
+  usageRate: number;
+}
+
+export interface ConversationUsageSummary {
+  orgId: string;
+  period: {
+    startAt?: string;
+    endAt?: string;
+    resetDay?: number;
+  };
+  quota: ConversationQuotaSummary;
+  totals: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+    records: number;
+  };
+  byModel: ConversationModelUsage[];
+}
+
+export interface ConversationUsageDetailItem {
+  id: string;
+  sessionId: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+  intent: string;
+  createdAt?: string;
+}
+
+export interface ModelOptionRecord {
+  id: string;
+  label: string;
+  provider: string;
+  runtimeModel: string;
+  description: string;
+  available: boolean;
+  requiresApiKey: boolean;
+  lockedReason?: string | null;
+  isDefault: boolean;
+}
+
+export interface OrgModelSettings {
+  orgId: string;
+  billingMode: string;
+  preferences: Record<ModelCapability, string>;
+  availableModels: Record<ModelCapability, ModelOptionRecord[]>;
+}
+
+export interface PipelineModelOverridesRecord {
+  copy?: string;
+  frameEdit?: string;
+  videoGen?: string;
+}
+
+export interface PipelineRecord {
+  id: string;
+  orgId?: string;
+  brandId?: string;
+  name: string;
+  type: string;
+  status: string;
+  description?: string;
+  imGroupId?: string;
+  totalVideosProduced: number;
+  totalVideosPublished: number;
+  preferences: {
+    preferredStyles: string[];
+    avoidStyles: string[];
+    preferredDuration: number;
+    aspectRatio: string;
+    subtitlePreferences: Record<string, unknown>;
+    remixInsights: Record<string, unknown>;
+    feedbackCount: number;
+  };
+  schedule: {
+    enabled: boolean;
+    cron: string;
+    videosPerRun: number;
+    timezone: string;
+  };
+  distributionRules: {
+    assignmentIds: string[];
+    preferredPlatforms: string[];
+    preferredCategories: string[];
+    strategy: string;
+  };
+  modelOverrides: PipelineModelOverridesRecord;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UsageTimelinePoint {
@@ -1197,6 +1317,13 @@ function normalizeBrand(raw: unknown): Brand {
     orgId: stringOrUndefined(record.orgId),
     createdAt: stringOrUndefined(record.createdAt),
     updatedAt: stringOrUndefined(record.updatedAt),
+    referenceImages: arrayValue<string>(assets.referenceImages),
+    slogans: arrayValue<string>(assets.slogans),
+    keywords: arrayValue<string>(assets.keywords),
+    prohibitedWords: arrayValue<string>(assets.prohibitedWords),
+    preferredDuration,
+    aspectRatio,
+    subtitleStyle: objectValue(videoStyle?.subtitleStyle) || undefined,
   };
 }
 
@@ -1452,6 +1579,78 @@ function normalizeUsageSummary(raw: unknown): UsageSummary {
   };
 }
 
+function normalizeConversationQuotaSummary(raw: unknown): ConversationQuotaSummary {
+  const record = objectValue(raw) || {};
+
+  return {
+    isUnlimited: booleanValue(record.isUnlimited),
+    total: record.total === null || record.total === undefined ? null : numberValue(record.total),
+    used: numberValue(record.used),
+    remaining: record.remaining === null || record.remaining === undefined ? null : numberValue(record.remaining),
+    usageRate: numberValue(record.usageRate),
+    warningLevel:
+      stringValue(record.warningLevel, "normal") === "exceeded"
+        ? "exceeded"
+        : stringValue(record.warningLevel, "normal") === "warning"
+          ? "warning"
+          : "normal",
+  };
+}
+
+function normalizeConversationModelUsage(raw: unknown): ConversationModelUsage {
+  const record = objectValue(raw) || {};
+
+  return {
+    model: stringValue(record.model, "unknown"),
+    inputTokens: numberValue(record.inputTokens),
+    outputTokens: numberValue(record.outputTokens),
+    totalTokens: numberValue(record.totalTokens),
+    estimatedCost: numberValue(record.estimatedCost),
+    records: numberValue(record.records),
+    usageRate: numberValue(record.usageRate),
+  };
+}
+
+function normalizeConversationUsageSummary(raw: unknown): ConversationUsageSummary {
+  const record = objectValue(raw) || {};
+  const period = objectValue(record.period) || {};
+  const totals = objectValue(record.totals) || {};
+
+  return {
+    orgId: stringValue(record.orgId),
+    period: {
+      startAt: stringOrUndefined(period.startAt),
+      endAt: stringOrUndefined(period.endAt),
+      resetDay: numberValue(period.resetDay),
+    },
+    quota: normalizeConversationQuotaSummary(record.quota),
+    totals: {
+      inputTokens: numberValue(totals.inputTokens),
+      outputTokens: numberValue(totals.outputTokens),
+      totalTokens: numberValue(totals.totalTokens),
+      estimatedCost: numberValue(totals.estimatedCost),
+      records: numberValue(totals.records),
+    },
+    byModel: arrayValue(record.byModel).map((item) => normalizeConversationModelUsage(item)),
+  };
+}
+
+function normalizeConversationUsageDetailItem(raw: unknown): ConversationUsageDetailItem {
+  const record = objectValue(raw) || {};
+
+  return {
+    id: extractId(record, "conversation_usage"),
+    sessionId: stringValue(record.sessionId),
+    model: stringValue(record.model, "unknown"),
+    inputTokens: numberValue(record.inputTokens),
+    outputTokens: numberValue(record.outputTokens),
+    totalTokens: numberValue(record.totalTokens),
+    estimatedCost: numberValue(record.estimatedCost),
+    intent: stringValue(record.intent, "chat"),
+    createdAt: stringOrUndefined(record.createdAt),
+  };
+}
+
 function normalizeUsageTimeline(raw: unknown): UsageTimeline {
   const record = objectValue(raw) || {};
 
@@ -1576,6 +1775,106 @@ function normalizeAccountSnapshot(raw: unknown): AccountSnapshot {
     credits: normalizeCreditSummary(record.credits),
     packs: arrayValue(record.packs).map((item) => normalizeAccountPack(item)),
     currentPeriod: normalizeUsageTotals(record.currentPeriod),
+  };
+}
+
+function normalizeModelOption(raw: unknown): ModelOptionRecord {
+  const record = objectValue(raw) || {};
+
+  return {
+    id: stringValue(record.id),
+    label: stringValue(record.label, stringValue(record.id, "未命名模型")),
+    provider: stringValue(record.provider),
+    runtimeModel: stringValue(record.runtimeModel),
+    description: stringValue(record.description),
+    available: booleanValue(record.available),
+    requiresApiKey: booleanValue(record.requiresApiKey),
+    lockedReason: stringOrUndefined(record.lockedReason),
+    isDefault: booleanValue(record.isDefault),
+  };
+}
+
+function normalizeModelPreferences(raw: unknown): Record<ModelCapability, string> {
+  const record = objectValue(raw) || {};
+
+  return {
+    chat: stringValue(record.chat, "deepseek-v3"),
+    copy: stringValue(record.copy, "deepseek-v3"),
+    frameEdit: stringValue(record.frameEdit, "gemini-2.5-flash-image"),
+    videoGen: stringValue(record.videoGen, "kling-v3-omni"),
+    analysis: stringValue(record.analysis, "deepseek-v3"),
+  };
+}
+
+function normalizeAvailableModels(raw: unknown): Record<ModelCapability, ModelOptionRecord[]> {
+  const record = objectValue(raw) || {};
+
+  return {
+    chat: arrayValue(record.chat).map((item) => normalizeModelOption(item)),
+    copy: arrayValue(record.copy).map((item) => normalizeModelOption(item)),
+    frameEdit: arrayValue(record.frameEdit).map((item) => normalizeModelOption(item)),
+    videoGen: arrayValue(record.videoGen).map((item) => normalizeModelOption(item)),
+    analysis: arrayValue(record.analysis).map((item) => normalizeModelOption(item)),
+  };
+}
+
+function normalizeOrgModelSettings(raw: unknown): OrgModelSettings {
+  const record = objectValue(raw) || {};
+
+  return {
+    orgId: stringValue(record.orgId),
+    billingMode: stringValue(record.billingMode, "quota"),
+    preferences: normalizeModelPreferences(record.preferences),
+    availableModels: normalizeAvailableModels(record.availableModels),
+  };
+}
+
+function normalizePipeline(raw: unknown): PipelineRecord {
+  const record = objectValue(raw) || {};
+  const preferences = objectValue(record.preferences) || {};
+  const schedule = objectValue(record.schedule) || {};
+  const distributionRules = objectValue(record.distributionRules) || {};
+  const modelOverrides = objectValue(record.modelOverrides) || {};
+
+  return {
+    id: extractId(record, "pipeline"),
+    orgId: stringOrUndefined(record.orgId),
+    brandId: stringOrUndefined(record.brandId),
+    name: stringValue(record.name, "未命名管线"),
+    type: stringValue(record.type, "seeding"),
+    status: stringValue(record.status, "active"),
+    description: stringOrUndefined(record.description),
+    imGroupId: stringOrUndefined(record.imGroupId),
+    totalVideosProduced: numberValue(record.totalVideosProduced),
+    totalVideosPublished: numberValue(record.totalVideosPublished),
+    preferences: {
+      preferredStyles: arrayValue<string>(preferences.preferredStyles),
+      avoidStyles: arrayValue<string>(preferences.avoidStyles),
+      preferredDuration: numberValue(preferences.preferredDuration, 15),
+      aspectRatio: stringValue(preferences.aspectRatio, "9:16"),
+      subtitlePreferences: objectValue(preferences.subtitlePreferences) || {},
+      remixInsights: objectValue(preferences.remixInsights) || {},
+      feedbackCount: numberValue(preferences.feedbackCount),
+    },
+    schedule: {
+      enabled: booleanValue(schedule.enabled),
+      cron: stringValue(schedule.cron, "0 9 * * 1-5"),
+      videosPerRun: numberValue(schedule.videosPerRun, 1),
+      timezone: stringValue(schedule.timezone, "Asia/Shanghai"),
+    },
+    distributionRules: {
+      assignmentIds: arrayValue<string>(distributionRules.assignmentIds),
+      preferredPlatforms: arrayValue<string>(distributionRules.preferredPlatforms),
+      preferredCategories: arrayValue<string>(distributionRules.preferredCategories),
+      strategy: stringValue(distributionRules.strategy, "round-robin"),
+    },
+    modelOverrides: {
+      copy: stringOrUndefined(modelOverrides.copy),
+      frameEdit: stringOrUndefined(modelOverrides.frameEdit),
+      videoGen: stringOrUndefined(modelOverrides.videoGen),
+    },
+    createdAt: stringOrUndefined(record.createdAt),
+    updatedAt: stringOrUndefined(record.updatedAt),
   };
 }
 
@@ -2078,11 +2377,57 @@ function normalizeNotificationFeedList(payload: unknown) {
 function buildBrandPayload(data: Record<string, unknown>) {
   const name = stringOrUndefined(data.name);
   const industry = stringOrUndefined(data.industry) || stringOrUndefined(data.category);
+  const rawAssets = objectValue(data.assets);
+  const rawVideoStyle = objectValue(data.videoStyle);
+  const preferredDuration = typeof data.preferredDuration === "number"
+    ? data.preferredDuration
+    : typeof rawVideoStyle?.preferredDuration === "number"
+      ? rawVideoStyle.preferredDuration
+      : undefined;
+  const assetPayload = compactObject({
+    logoUrl: firstString(data.logoUrl, rawAssets?.logoUrl),
+    referenceImages: Array.isArray(data.referenceImages)
+      ? data.referenceImages
+      : Array.isArray(rawAssets?.referenceImages)
+        ? rawAssets.referenceImages
+        : undefined,
+    slogans: Array.isArray(data.slogans)
+      ? data.slogans
+      : Array.isArray(rawAssets?.slogans)
+        ? rawAssets.slogans
+        : undefined,
+    keywords: Array.isArray(data.keywords)
+      ? data.keywords
+      : Array.isArray(rawAssets?.keywords)
+        ? rawAssets.keywords
+        : undefined,
+    prohibitedWords: Array.isArray(data.prohibitedWords)
+      ? data.prohibitedWords
+      : Array.isArray(rawAssets?.prohibitedWords)
+        ? rawAssets.prohibitedWords
+        : undefined,
+    colors: Array.isArray(data.colors)
+      ? data.colors
+      : Array.isArray(rawAssets?.colors)
+        ? rawAssets.colors
+        : undefined,
+    fonts: Array.isArray(data.fonts)
+      ? data.fonts
+      : Array.isArray(rawAssets?.fonts)
+        ? rawAssets.fonts
+        : undefined,
+  });
+  const videoStylePayload = compactObject({
+    preferredDuration,
+    aspectRatio: firstString(data.aspectRatio, rawVideoStyle?.aspectRatio),
+    subtitleStyle: objectValue(data.subtitleStyle) || objectValue(rawVideoStyle?.subtitleStyle),
+  });
   const payload = compactObject({
     name,
     industry,
-    logoUrl: stringOrUndefined(data.logoUrl),
-    videoStyle: stringOrUndefined(data.videoStyle),
+    logoUrl: firstString(data.logoUrl, rawAssets?.logoUrl),
+    assets: Object.keys(assetPayload).length > 0 ? assetPayload : undefined,
+    videoStyle: Object.keys(videoStylePayload).length > 0 ? videoStylePayload : undefined,
     visualIdentity: objectValue(data.visualIdentity),
   });
 
@@ -2493,6 +2838,59 @@ const orgApi = {
     ]);
     return toResult(normalizePaginated(raw, (item) => normalizeUser(item)).items);
   },
+  modelPreferences: {
+    get: async () => {
+      const raw = await requestData<unknown>({
+        url: "/v1/org/model-preferences",
+      });
+      return toResult(normalizeOrgModelSettings(raw));
+    },
+    update: async (data: Partial<Record<ModelCapability, string | null | undefined>>) => {
+      const raw = await requestData<unknown>({
+        url: "/v1/org/model-preferences",
+        method: "PATCH",
+        data,
+      });
+      return toResult(normalizeOrgModelSettings(raw));
+    },
+  },
+};
+
+const usageApi = {
+  conversationSummary: async () => {
+    const raw = await requestData<unknown>({
+      url: "/v1/usage/conversation-summary",
+    });
+    return toResult(normalizeConversationUsageSummary(raw));
+  },
+  conversationDetail: async (params?: { page?: number; limit?: number }) => {
+    const raw = await requestData<unknown>({
+      url: "/v1/usage/conversation-detail",
+      params,
+    });
+    return toResult(normalizePaginated(raw, (item) => normalizeConversationUsageDetailItem(item)));
+  },
+  modelBreakdown: async () => {
+    const raw = await requestData<unknown>({
+      url: "/v1/usage/model-breakdown",
+    });
+    return toResult(arrayValue(raw).map((item) => normalizeConversationModelUsage(item)));
+  },
+  trackConversation: async (data: {
+    sessionId?: string;
+    model?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    estimatedCost?: number;
+    intent?: string;
+    createdAt?: string;
+  }) =>
+    request({
+      url: "/v1/usage/track-conversation",
+      method: "POST",
+      data,
+    }),
 };
 
 const billingApi = {
@@ -2511,6 +2909,41 @@ const billingApi = {
       { url: "/v1/payment/invoices", params },
     ]);
     return toResult(normalizePaginated(raw, (item) => normalizeBillingInvoice(item)));
+  },
+};
+
+const pipelinesApi = {
+  list: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/pipelines" },
+      { url: "/v1/pipeline" },
+    ]);
+    return toResult(
+      Array.isArray(raw)
+        ? raw.map((item) => normalizePipeline(item))
+        : normalizePaginated(raw, (item) => normalizePipeline(item)).items,
+    );
+  },
+  get: async (id: string) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: `/v1/pipelines/${id}` },
+      { url: `/v1/pipeline/${id}` },
+    ]);
+    return toResult(normalizePipeline(raw));
+  },
+  update: async (id: string, data: Record<string, unknown>) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: `/v1/pipelines/${id}`, method: "PATCH", data },
+      { url: `/v1/pipeline/${id}`, method: "PATCH", data },
+    ]);
+    return toResult(normalizePipeline(raw));
+  },
+  updateModelOverrides: async (id: string, data: PipelineModelOverridesRecord) => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: `/v1/pipelines/${id}/model-overrides`, method: "PATCH", data },
+      { url: `/v1/pipeline/${id}/model-overrides`, method: "PATCH", data },
+    ]);
+    return toResult(normalizePipeline(raw));
   },
 };
 const settingsApi = {
@@ -2926,10 +3359,12 @@ export const api = {
   data: dataApi,
   brands: brandsApi,
   brand: brandsApi,
+  pipelines: pipelinesApi,
   calendar: calendarApi,
   admin: adminApi,
   org: orgApi,
   account: accountApi,
+  usage: usageApi,
   billing: billingApi,
   payment: paymentApi,
   videos: videosApi,

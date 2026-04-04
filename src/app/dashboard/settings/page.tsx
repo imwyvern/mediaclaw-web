@@ -6,6 +6,7 @@ import {
   Bot,
   CheckCircle2,
   Copy,
+  Cpu,
   Key,
   Loader2,
   Plus,
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/empty-state";
@@ -38,7 +40,10 @@ import {
   api,
   type ApiKeyRecord,
   type ClawHostInstanceRecord,
+  type ModelCapability,
+  type ModelOptionRecord,
   type NotificationChannel,
+  type OrgModelSettings,
   type User,
   type WebhookRecord,
 } from "@/lib/api";
@@ -56,7 +61,7 @@ import {
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
 
-type SettingsTab = "profile" | "api" | "webhooks" | "notifications" | "openclaw";
+type SettingsTab = "profile" | "api" | "webhooks" | "notifications" | "ai" | "openclaw";
 type AsyncStatus = "idle" | "loading" | "success" | "error";
 
 interface ApiKeyFormState {
@@ -110,6 +115,26 @@ const DEFAULT_NOTIFICATION_SEED = {
   config: {},
   isActive: true,
 };
+
+const DEFAULT_MODEL_FORM: Record<ModelCapability, string> = {
+  chat: "deepseek-v3",
+  copy: "deepseek-v3",
+  frameEdit: "gemini-2.5-flash-image",
+  videoGen: "kling-v3-omni",
+  analysis: "deepseek-v3",
+};
+
+const MODEL_CAPABILITY_META: Array<{
+  key: ModelCapability;
+  label: string;
+  description: string;
+}> = [
+  { key: "chat", label: "对话模型", description: "日常助手对话、问答和操作指令。" },
+  { key: "copy", label: "文案模型", description: "视频文案、标题、评论引导等生成。" },
+  { key: "frameEdit", label: "帧编辑模型", description: "品牌换皮、参考帧改写和素材编辑。" },
+  { key: "videoGen", label: "视频生成模型", description: "图生视频和片段生成阶段。" },
+  { key: "analysis", label: "分析模型", description: "爆款拆解、失败分析和复盘优化。" },
+];
 
 function splitCommaSeparated(value: string) {
   return value
@@ -206,6 +231,30 @@ function getApiKeyDisplayValue(record: ApiKeyRecord) {
   return record.secret || record.maskedKey || record.prefix;
 }
 
+function formatBillingModeLabel(mode?: string) {
+  switch (mode) {
+    case "byok":
+      return "BYOK 自带 Key";
+    case "postpaid":
+      return "后付费";
+    case "quota":
+    default:
+      return "订阅含量";
+  }
+}
+
+function findModelOption(
+  settings: OrgModelSettings | null,
+  capability: ModelCapability,
+  modelId: string,
+): ModelOptionRecord | null {
+  if (!settings) {
+    return null;
+  }
+
+  return settings.availableModels[capability].find((option) => option.id === modelId) ?? null;
+}
+
 function toNotificationDraft(channel: NotificationChannel): NotificationDraft {
   return {
     id: channel.id,
@@ -276,6 +325,12 @@ export default function SettingsPage() {
   const [notificationDrafts, setNotificationDrafts] = useState<NotificationDraft[]>([]);
   const [savingNotificationKey, setSavingNotificationKey] = useState<string | null>(null);
   const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
+
+  const [aiStatus, setAiStatus] = useState<AsyncStatus>("idle");
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [modelSettings, setModelSettings] = useState<OrgModelSettings | null>(null);
+  const [modelForm, setModelForm] = useState<Record<ModelCapability, string>>(DEFAULT_MODEL_FORM);
+  const [isSavingAiSettings, setIsSavingAiSettings] = useState(false);
 
   const [openClawStatus, setOpenClawStatus] = useState<AsyncStatus>("idle");
   const [openClawError, setOpenClawError] = useState<string | null>(null);
@@ -364,6 +419,23 @@ export default function SettingsPage() {
     }
   }
 
+  async function loadAiSettings() {
+    setAiStatus("loading");
+    setAiError(null);
+
+    try {
+      const response = await api.org.modelPreferences.get();
+      setModelSettings(response.data);
+      setModelForm(response.data.preferences);
+      setAiStatus("success");
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to load AI model settings.");
+      setAiError(message);
+      setAiStatus("error");
+      toast.error("加载 AI 模型配置失败", { description: message });
+    }
+  }
+
   async function loadOpenClaw() {
     setOpenClawStatus("loading");
     setOpenClawError(null);
@@ -417,10 +489,14 @@ export default function SettingsPage() {
       void loadNotifications();
     }
 
+    if (activeTab === "ai" && aiStatus === "idle") {
+      void loadAiSettings();
+    }
+
     if (activeTab === "openclaw" && openClawStatus === "idle") {
       void loadOpenClaw();
     }
-  }, [activeTab, apiKeysStatus, notificationsStatus, openClawStatus, webhooksStatus]);
+  }, [activeTab, aiStatus, apiKeysStatus, notificationsStatus, openClawStatus, webhooksStatus]);
 
   async function handleCopy(value: string, label: string) {
     if (!value) {
@@ -687,6 +763,23 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveAiSettings() {
+    setIsSavingAiSettings(true);
+
+    try {
+      const response = await api.org.modelPreferences.update(modelForm);
+      setModelSettings(response.data);
+      setModelForm(response.data.preferences);
+      setAiStatus("success");
+      toast.success("AI 模型偏好已保存");
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to save AI model settings.");
+      toast.error("保存 AI 模型偏好失败", { description: message });
+    } finally {
+      setIsSavingAiSettings(false);
+    }
+  }
+
   async function syncOpenClawInstance(instanceId: string) {
     const instanceResponse = await api.clawhost.get(instanceId);
 
@@ -817,6 +910,9 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="notifications" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
             <BellRing className="h-4 w-4" /> Notifications
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
+            <Cpu className="h-4 w-4" /> AI 模型
           </TabsTrigger>
           <TabsTrigger value="openclaw" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
             <Bot className="h-4 w-4" /> OpenClaw
@@ -1395,6 +1491,172 @@ export default function SettingsPage() {
                   </div>
                 )}
               </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ai" className="mt-0 space-y-6">
+            <Card className="border-white/10 bg-zinc-950/60">
+              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-white">AI 模型偏好</CardTitle>
+                  <CardDescription>
+                    企业级默认模型配置。若某个模型需要对应 API Key，但当前未配置，会在下拉中显示为锁定状态。
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void loadAiSettings()}>
+                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> 刷新配置
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {aiStatus === "loading" ? (
+                  <SectionSkeleton blocks={2} />
+                ) : aiStatus === "error" ? (
+                  <ErrorState
+                    title="AI 模型配置不可用"
+                    description={aiError ?? "加载 AI 模型配置失败。"}
+                    onRetry={() => void loadAiSettings()}
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : !modelSettings ? (
+                  <EmptyState
+                    icon={Cpu}
+                    title="还没有 AI 模型配置"
+                    description="组织初始化完成后，这里会显示默认模型和可用模型池。"
+                    actionLabel="重新加载"
+                    onAction={() => void loadAiSettings()}
+                    className="border-white/10 bg-zinc-950/60"
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">计费模式</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {formatBillingModeLabel(modelSettings.billingMode)}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {modelSettings.billingMode === "byok"
+                            ? "BYOK 模式下，可用模型由你已配置的 Key 决定。"
+                            : "订阅模式下默认模型已含在套餐内，高级模型需先配置对应 Key。"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">可用模型数</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {MODEL_CAPABILITY_META.reduce((count, item) => (
+                            count + modelSettings.availableModels[item.key].filter((option) => option.available).length
+                          ), 0)}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          跨 5 个能力域统计，含默认模型和已解锁高级模型。
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">保存策略</div>
+                        <div className="mt-3 text-sm font-semibold text-white">组织级默认，管线可覆盖</div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          保存后会影响整个企业默认执行链路；如需特殊场景，请在品牌下的管线设置中覆盖。
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                      高级模型需要对应供应商 API Key 才能使用。未解锁模型仍会展示，但无法被保存为当前偏好。
+                    </div>
+
+                    <div className="space-y-4">
+                      {MODEL_CAPABILITY_META.map((item) => {
+                        const options = modelSettings.availableModels[item.key] || [];
+                        const selectedValue = modelForm[item.key];
+                        const selectedOption = findModelOption(modelSettings, item.key, selectedValue);
+
+                        return (
+                          <Card key={item.key} className="border-white/10 bg-black/20">
+                            <CardHeader className="pb-4">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <CardTitle className="text-base text-white">{item.label}</CardTitle>
+                                  <CardDescription>{item.description}</CardDescription>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {selectedOption?.isDefault ? (
+                                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+                                      默认模型
+                                    </Badge>
+                                  ) : null}
+                                  <Badge
+                                    variant="outline"
+                                    className={selectedOption?.available
+                                      ? "border-white/10 text-zinc-300"
+                                      : "border-amber-500/20 bg-amber-500/10 text-amber-300"}
+                                  >
+                                    {selectedOption?.available ? "可用" : "需配置 Key"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),220px]">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`model-${item.key}`}>{item.label}</Label>
+                                  <Select
+                                    value={selectedValue}
+                                    onValueChange={(value) =>
+                                      setModelForm((current) => ({ ...current, [item.key]: value ?? current[item.key] }))
+                                    }
+                                  >
+                                    <SelectTrigger
+                                      id={`model-${item.key}`}
+                                      className="h-11 w-full border-white/10 bg-white/[0.03] text-slate-100"
+                                    >
+                                      <SelectValue placeholder={`选择${item.label}`} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {options.map((option) => (
+                                        <SelectItem key={option.id} value={option.id} disabled={!option.available}>
+                                          <span className="flex w-full items-center justify-between gap-3">
+                                            <span>{option.label}</span>
+                                            <span className="text-xs text-muted-foreground">
+                                              {option.available ? option.provider.toUpperCase() : "需 Key"}
+                                            </span>
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="rounded-xl border border-white/10 bg-zinc-950/70 p-4">
+                                  <div className="text-xs uppercase tracking-wide text-muted-foreground">运行模型</div>
+                                  <div className="mt-2 text-sm font-medium text-white">
+                                    {selectedOption?.runtimeModel || "未配置"}
+                                  </div>
+                                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                    {selectedOption?.description || "当前模型描述暂不可用。"}
+                                  </p>
+                                  {selectedOption?.lockedReason ? (
+                                    <p className="mt-2 text-xs leading-5 text-amber-300">
+                                      {selectedOption.lockedReason}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="border-t border-white/10 px-6 py-4">
+                <Button onClick={() => void handleSaveAiSettings()} disabled={aiStatus !== "success" || isSavingAiSettings}>
+                  {isSavingAiSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  保存 AI 模型偏好
+                </Button>
+              </CardFooter>
             </Card>
           </TabsContent>
 

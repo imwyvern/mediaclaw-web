@@ -27,6 +27,7 @@ import {
   readApiErrorMessage,
   type AccountSnapshot,
   type BillingInvoiceRecord,
+  type ConversationUsageSummary,
   type PaginatedResponse,
   type PaymentOrder,
   type PaymentProduct,
@@ -135,6 +136,7 @@ export default function BillingPage() {
 
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
+  const [conversationSummary, setConversationSummary] = useState<ConversationUsageSummary | null>(null);
   const [products, setProducts] = useState<PaymentProduct[]>([]);
   const [orders, setOrders] = useState<PaginatedResponse<PaymentOrder> | null>(null);
   const [usageDetail, setUsageDetail] = useState<PaginatedResponse<UsageDetailItem> | null>(null);
@@ -145,15 +147,18 @@ export default function BillingPage() {
     setTopError(null);
 
     try {
-      const [accountResponse, usageSummaryResponse, productsResponse] = await Promise.all([
+      const [accountResponse, usageSummaryResponse, productsResponse, conversationResponse] = await Promise.all([
         api.account.get(),
         api.billing.usageSummary(),
         api.payment.products(),
+        api.usage.conversationSummary(),
       ]);
       setAccount(accountResponse.data);
       setUsageSummary(usageSummaryResponse.data);
       setProducts(sortPaymentProducts(productsResponse.data));
+      setConversationSummary(conversationResponse.data);
     } catch (error) {
+      setConversationSummary(null);
       setTopError(readApiErrorMessage(error, "账单概览加载失败，请稍后重试。"));
     } finally {
       setTopLoading(false);
@@ -230,6 +235,8 @@ export default function BillingPage() {
   const totalCredits = account?.credits.total ?? 0;
   const monthlyUsed = usageSummary?.totals.creditsConsumed ?? account?.currentPeriod.creditsConsumed ?? 0;
   const estimatedCost = usageSummary?.totals.estimatedCost ?? usageSummary?.totals.tokenCost ?? 0;
+  const conversationQuota = conversationSummary?.quota;
+  const conversationQuotaPercent = conversationQuota?.isUnlimited ? 0 : conversationQuota?.usageRate ?? 0;
   const recentInvoiceAmount = (invoices?.items || []).reduce((total, invoice) => total + invoice.amount, 0);
   const bestValueProductId = products.reduce<string | null>((bestId, product) => {
     if (product.unitCredits <= 0) {
@@ -357,6 +364,95 @@ export default function BillingPage() {
               </Card>
             ))}
           </div>
+        ) : null}
+
+        {conversationSummary ? (
+          <Card className="border-white/10 bg-[linear-gradient(180deg,rgba(17,24,39,0.94),rgba(5,10,20,0.98))]">
+            <CardHeader>
+              <CardTitle className="text-white">对话 Token 用量</CardTitle>
+              <CardDescription className="text-slate-300/70">
+                按本月对话会话的真实消耗统计。当前阶段只做透明追踪与提醒，不会因为超额而阻断对话。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 lg:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">本月已用</div>
+                  <div className="mt-3 text-2xl font-bold text-white">
+                    {formatCompactNumber(conversationSummary.totals.totalTokens)}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    共 {formatCompactNumber(conversationSummary.totals.records)} 次会话
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">月含量</div>
+                  <div className="mt-3 text-2xl font-bold text-white">
+                    {conversationQuota?.isUnlimited ? "无限制" : formatCompactNumber(conversationQuota?.total ?? 0)}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    {conversationQuota?.isUnlimited ? "BYOK 模式由你自己的 Key 承担成本" : "超额只提醒，不阻断"}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">当前状态</div>
+                  <div className="mt-3 text-2xl font-bold text-white">
+                    {conversationQuota?.warningLevel === "exceeded"
+                      ? "已超额"
+                      : conversationQuota?.warningLevel === "warning"
+                        ? "接近上限"
+                        : "正常"}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    80% 触发提醒，100% 建议升级套餐或切换 BYOK
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">预估成本</div>
+                  <div className="mt-3 text-2xl font-bold text-white">
+                    {formatCurrency(conversationSummary.totals.estimatedCost)}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    仅用于透明展示模型成本结构
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-white">配额进度</div>
+                    <div className="text-xs text-slate-400">
+                      {conversationQuota?.isUnlimited
+                        ? "无限模式下不做 Token 配额限制。"
+                        : `已使用 ${formatPercent(conversationQuotaPercent)}，剩余 ${formatCompactNumber(conversationQuota?.remaining ?? 0)} tokens。`}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
+                    render={<Link href="/dashboard/usage" />}
+                  >
+                    查看明细
+                  </Button>
+                </div>
+                <Progress value={conversationQuota?.isUnlimited ? 18 : Math.min(conversationQuotaPercent, 100)} className="h-3 bg-white/10" />
+                <div className="grid gap-2 md:grid-cols-3">
+                  {(conversationSummary.byModel || []).slice(0, 3).map((item) => (
+                    <div key={item.model} className="rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                      <div className="text-sm font-medium text-white">{item.model}</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        {formatCompactNumber(item.totalTokens)} tokens · {formatPercent(item.usageRate)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
