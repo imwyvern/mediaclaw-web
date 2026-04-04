@@ -208,7 +208,7 @@ export default function AuthPage() {
             <Tabs value={mode} className="w-full flex-col" onValueChange={(value) => setMode(value as "login" | "register")}>
                 <TabsList className="mb-8 grid h-12 w-full grid-cols-2 rounded-xl border border-border/60 bg-muted/50 p-1">
                   <TabsTrigger value="login" className="rounded-lg text-sm font-medium transition-all">
-                    个人登录
+                    手机号登录
                   </TabsTrigger>
                   <TabsTrigger value="register" className="rounded-lg text-sm font-medium transition-all">
                     企业注册
