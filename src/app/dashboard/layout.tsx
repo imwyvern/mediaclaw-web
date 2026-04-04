@@ -24,6 +24,7 @@ import {
   Shield,
   Target,
   Video,
+  type LucideIcon,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -59,7 +60,14 @@ import { api, type AccountSnapshot, type User } from "@/lib/api";
 import { formatCompactNumber } from "@/lib/format";
 import { useAuthStore } from "@/lib/store";
 
-const navItems = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  adminOnly?: boolean;
+}
+
+const navItems: readonly NavItem[] = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Content", href: "/dashboard/content", icon: Layers },
   { name: "Videos", href: "/dashboard/videos", icon: Film },
@@ -71,7 +79,7 @@ const navItems = [
   { name: "Usage", href: "/dashboard/usage", icon: Activity },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { name: "Admin", href: "/dashboard/admin", icon: Shield },
+  { name: "Admin", href: "/dashboard/admin", icon: Shield, adminOnly: true },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ] as const;
 
@@ -112,14 +120,18 @@ function SidebarContent({
   remainingCredits,
   totalCredits,
   usagePercent,
+  roleScope,
   onItemClick,
 }: {
   pathname: string;
   remainingCredits: number;
   totalCredits: number;
   usagePercent: number;
+  roleScope?: User["roleScope"];
   onItemClick?: () => void;
 }) {
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || roleScope === "admin");
+
   return (
     <div className="flex h-full flex-col border-r bg-background">
       <div className="p-6">
@@ -132,7 +144,7 @@ function SidebarContent({
       </div>
       <ScrollArea className="flex-1 px-4">
         <nav className="space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             const Icon = item.icon;
 
@@ -259,6 +271,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           remainingCredits={remainingCredits}
           totalCredits={totalCredits}
           usagePercent={usagePercent}
+          roleScope={currentUser?.roleScope}
         />
       </aside>
 
@@ -278,6 +291,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   remainingCredits={remainingCredits}
                   totalCredits={totalCredits}
                   usagePercent={usagePercent}
+                  roleScope={currentUser?.roleScope}
                   onItemClick={() => setIsMobileOpen(false)}
                 />
               </SheetContent>
@@ -328,7 +342,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {currentUser?.name || "MediaClaw User"}
                   </span>
                   <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {currentUser?.role === "admin" ? "管理员" : "成员"}
+                    {currentUser?.roleLabel || "成员"}
                   </span>
                 </div>
               </DropdownMenuTrigger>

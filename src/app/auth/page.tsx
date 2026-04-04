@@ -159,7 +159,7 @@ export default function AuthPage() {
       login(user, accessToken);
 
       toast.success("企业空间创建成功");
-      router.push("/dashboard");
+      router.push("/dashboard/onboarding");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "企业空间创建失败，请稍后重试");
     } finally {

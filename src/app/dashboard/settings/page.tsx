@@ -43,6 +43,9 @@ import {
   type WebhookRecord,
 } from "@/lib/api";
 import {
+  formatOpenClawConnectionStatus,
+  formatOpenClawDeploymentMode,
+  formatOpenClawImChannel,
   DEFAULT_OPENCLAW_INSTANCE_CONFIG,
   formatOpenClawStatus,
   hasOpenClawSkill,
@@ -278,8 +281,11 @@ export default function SettingsPage() {
   const [openClawError, setOpenClawError] = useState<string | null>(null);
   const [openClawInstance, setOpenClawInstance] = useState<ClawHostInstanceRecord | null>(null);
   const [openClawAction, setOpenClawAction] = useState<"install" | "uninstall" | null>(null);
+  const [issuingConnectionCode, setIssuingConnectionCode] = useState(false);
+  const [lastIssuedConnectionCode, setLastIssuedConnectionCode] = useState<string | null>(null);
   const currentUser = accountInfo ?? storedUser;
   const mediaclawClientInstalled = hasOpenClawSkill(openClawInstance);
+  const canManageOpenClaw = currentUser?.roleScope === "admin";
 
   function syncAuthStore(nextUser: User) {
     const nextToken = storedToken || readAuthTokenFromCookies();
@@ -368,6 +374,7 @@ export default function SettingsPage() {
 
       if (!latestInstance) {
         setOpenClawInstance(null);
+        setLastIssuedConnectionCode(null);
         setOpenClawStatus("success");
         return;
       }
@@ -702,12 +709,14 @@ export default function SettingsPage() {
       return openClawInstance;
     }
 
-    const response = await api.clawhost.create({
+      const response = await api.clawhost.create({
       clientName: resolveOpenClawClientName([
         currentUser?.name,
         currentUser?.phone,
       ]),
       config: DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+      deploymentMode: "byoc",
+      requestedImChannel: "feishu",
     });
 
     setOpenClawInstance(response.data);
@@ -755,6 +764,28 @@ export default function SettingsPage() {
       toast.error("卸载 OpenClaw 技能失败", { description: message });
     } finally {
       setOpenClawAction(null);
+    }
+  }
+
+  async function handleIssueConnectionCode() {
+    if (!openClawInstance) {
+      toast.error("当前没有可绑定的 OpenClaw 实例");
+      return;
+    }
+
+    setIssuingConnectionCode(true);
+    try {
+      const response = await api.clawhost.issueConnectionCode(openClawInstance.instanceId);
+      setLastIssuedConnectionCode(response.data.code);
+      await syncOpenClawInstance(openClawInstance.instanceId);
+      toast.success("连接码已生成", {
+        description: "请在 OpenClaw 客户端输入该连接码完成绑定。",
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to issue OpenClaw connection code.");
+      toast.error("生成连接码失败", { description: message });
+    } finally {
+      setIssuingConnectionCode(false);
     }
   }
 
@@ -841,7 +872,7 @@ export default function SettingsPage() {
                           {currentUser.email || currentUser.phone || "No contact info"}
                         </div>
                         <Badge variant="outline" className="border-white/10 text-zinc-300">
-                          {currentUser.role}
+                          {currentUser.roleLabel}
                         </Badge>
                       </div>
                     </div>
@@ -890,7 +921,8 @@ export default function SettingsPage() {
                   <CardContent className="grid gap-4 sm:grid-cols-2">
                     <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">Role</div>
-                      <div className="mt-2 text-sm font-medium text-white">{currentUser.role}</div>
+                      <div className="mt-2 text-sm font-medium text-white">{currentUser.roleLabel}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">角色编码：{currentUser.role}</div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">WeChat</div>
@@ -1394,12 +1426,18 @@ export default function SettingsPage() {
                     icon={Bot}
                     title="尚未开通 OpenClaw"
                     description="点击下方按钮即可创建实例并安装 mediaclaw-client，后续的 AI 助手能力会直接挂载到当前企业账号。"
-                    actionLabel={openClawAction === "install" ? "开通中..." : "一键开通并安装"}
-                    onAction={() => void handleInstallOpenClawSkill()}
+                    actionLabel={canManageOpenClaw ? (openClawAction === "install" ? "开通中..." : "一键开通并安装") : undefined}
+                    onAction={canManageOpenClaw ? () => void handleInstallOpenClawSkill() : undefined}
                     className="border-white/10 bg-zinc-950/60"
                   />
                 ) : (
                   <div className="space-y-6">
+                    {!canManageOpenClaw ? (
+                      <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                        当前账号只有查看权限。OpenClaw 的开通、安装和连接码生成需要企业管理员操作。
+                      </div>
+                    ) : null}
+
                     <div className="grid gap-4 lg:grid-cols-3">
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground">实例状态</div>
@@ -1413,6 +1451,18 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">连接状态</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {formatOpenClawConnectionStatus(openClawInstance.connectionInfo.connectionStatus)}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {formatOpenClawDeploymentMode(openClawInstance.connectionInfo.deploymentMode)}
+                          {" · "}
+                          {formatOpenClawImChannel(openClawInstance.connectionInfo.requestedImChannel)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground">技能状态</div>
                         <div className="mt-3 text-sm font-semibold text-white">
                           {mediaclawClientInstalled ? "mediaclaw-client 已安装" : "mediaclaw-client 未安装"}
@@ -1421,14 +1471,36 @@ export default function SettingsPage() {
                           当前共安装 {openClawInstance.skills.length} 个技能
                         </p>
                       </div>
+                    </div>
 
+                    <div className="grid gap-4 lg:grid-cols-3">
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">健康延迟</div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">最近心跳</div>
                         <div className="mt-3 text-sm font-semibold text-white">
-                          {openClawInstance.healthStatus.latency} ms
+                          {formatDateTime(openClawInstance.connectionInfo.lastHeartbeatAt || undefined)}
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          健康状态 {openClawInstance.healthStatus.isHealthy ? "正常" : "待人工配置或异常"}
+                          健康窗口延迟 {openClawInstance.healthStatus.latency} 秒
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">客户端版本</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {openClawInstance.connectionInfo.lastClientVersion || "尚未上报"}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Agent ID: {openClawInstance.connectionInfo.lastAgentId || "未绑定"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">健康判定</div>
+                        <div className="mt-3 text-sm font-semibold text-white">
+                          {openClawInstance.healthStatus.isHealthy ? "正常" : "待人工配置或异常"}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          API Key 前缀 {openClawInstance.connectionInfo.boundApiKeyPrefix || "未绑定"}
                         </p>
                       </div>
                     </div>
@@ -1440,10 +1512,18 @@ export default function SettingsPage() {
                             ? void handleUninstallOpenClawSkill()
                             : void handleInstallOpenClawSkill()
                         }
-                        disabled={openClawAction !== null}
+                        disabled={!canManageOpenClaw || openClawAction !== null}
                       >
                         {openClawAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {mediaclawClientInstalled ? "卸载 mediaclaw-client" : "一键安装 mediaclaw-client"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleIssueConnectionCode()}
+                        disabled={!canManageOpenClaw || openClawAction !== null || issuingConnectionCode}
+                      >
+                        {issuingConnectionCode && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        生成连接码
                       </Button>
                       <Button variant="outline" onClick={() => void loadOpenClaw()} disabled={openClawAction !== null}>
                         刷新实例详情
@@ -1506,7 +1586,7 @@ export default function SettingsPage() {
                   <EmptyState
                     icon={Bot}
                     title="暂无连接信息"
-                    description="创建实例后，这里会显示实例 ID、命名空间和 Pod 信息。"
+                    description="创建实例后，这里会显示实例 ID、部署模式、连接码和安装命令。"
                     className="border-white/10 bg-zinc-950/60"
                   />
                 ) : (
@@ -1524,6 +1604,98 @@ export default function SettingsPage() {
                     <div className="space-y-2">
                       <Label>客户端名称</Label>
                       <Input value={openClawInstance.clientName} readOnly className="bg-black/20" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>部署模式</Label>
+                      <Input
+                        value={formatOpenClawDeploymentMode(openClawInstance.connectionInfo.deploymentMode)}
+                        readOnly
+                        className="bg-black/20"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>接入 IM 通道</Label>
+                      <Input
+                        value={formatOpenClawImChannel(openClawInstance.connectionInfo.requestedImChannel)}
+                        readOnly
+                        className="bg-black/20"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>访问地址</Label>
+                      <div className="flex">
+                        <Input
+                          value={openClawInstance.connectionInfo.accessUrl || "尚未分配"}
+                          readOnly
+                          className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
+                        />
+                        <Button
+                          variant="outline"
+                          className="rounded-l-none px-3"
+                          onClick={() => void handleCopy(openClawInstance.connectionInfo.accessUrl, "访问地址")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>连接状态</Label>
+                      <Input
+                        value={formatOpenClawConnectionStatus(openClawInstance.connectionInfo.connectionStatus)}
+                        readOnly
+                        className="bg-black/20"
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>安装命令</Label>
+                      <div className="flex">
+                        <Textarea
+                          value={openClawInstance.connectionInfo.installCommand || "尚未生成"}
+                          readOnly
+                          className="min-h-24 rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
+                        />
+                        <Button
+                          variant="outline"
+                          className="rounded-l-none px-3"
+                          onClick={() => void handleCopy(openClawInstance.connectionInfo.installCommand, "安装命令")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>连接码</Label>
+                      <div className="flex">
+                        <Input
+                          value={lastIssuedConnectionCode || openClawInstance.connectionInfo.connectionCodePreview || "尚未生成"}
+                          readOnly
+                          className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
+                        />
+                        <Button
+                          variant="outline"
+                          className="rounded-l-none px-3"
+                          onClick={() => void handleCopy(lastIssuedConnectionCode || openClawInstance.connectionInfo.connectionCodePreview, "连接码")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        过期时间 {formatDateTime(openClawInstance.connectionInfo.connectionCodeExpiresAt || undefined)}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>绑定 API Key</Label>
+                      <Input value={openClawInstance.connectionInfo.boundApiKeyPrefix || "尚未绑定"} readOnly className="bg-black/20" />
+                      <p className="text-xs text-muted-foreground">
+                        绑定时间 {formatDateTime(openClawInstance.connectionInfo.boundAt || undefined)}
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -1553,11 +1725,22 @@ export default function SettingsPage() {
 
                     <div className="space-y-2">
                       <Label>内存 / 存储</Label>
-                      <Input
-                        value={`${openClawInstance.config.memory} / ${openClawInstance.config.storage}`}
-                        readOnly
-                        className="bg-black/20"
-                      />
+                      <Input value={`${openClawInstance.config.memory} / ${openClawInstance.config.storage}`} readOnly className="bg-black/20" />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>客户端能力</Label>
+                      <div className="flex min-h-11 flex-wrap gap-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                        {openClawInstance.connectionInfo.heartbeatCapabilities.length > 0 ? (
+                          openClawInstance.connectionInfo.heartbeatCapabilities.map((capability) => (
+                            <Badge key={capability} variant="outline" className="border-white/10 text-zinc-300">
+                              {capability}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-muted-foreground">客户端暂未上报能力清单</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

@@ -59,12 +59,17 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
+export type UserRoleKey = "super_admin" | "admin" | "editor" | "viewer" | "user";
+export type UserRoleScope = "admin" | "user";
+
 export interface User {
   id: string;
   name: string;
   email?: string;
   phone: string;
-  role: "user" | "admin";
+  role: UserRoleKey;
+  roleScope: UserRoleScope;
+  roleLabel: string;
   wechatId?: string;
   orgId?: string | null;
   userType?: string;
@@ -239,6 +244,20 @@ export interface EnterpriseRegisterData {
   adminPhone: string;
 }
 
+export interface EnterpriseInviteRecord {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  phone: string;
+  role: UserRoleKey;
+  roleScope: UserRoleScope;
+  roleLabel: string;
+  status: string;
+  invitedAt?: string;
+  expiresAt?: string;
+  acceptedAt?: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
@@ -272,6 +291,22 @@ export interface ClawHostHealthStatusRecord {
   latency: number;
 }
 
+export interface ClawHostConnectionInfoRecord {
+  deploymentMode: string;
+  requestedImChannel: string;
+  accessUrl: string;
+  installCommand: string;
+  connectionStatus: string;
+  connectionCodePreview: string;
+  connectionCodeExpiresAt?: string | null;
+  boundApiKeyPrefix: string;
+  boundAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  lastClientVersion: string;
+  lastAgentId: string;
+  heartbeatCapabilities: string[];
+}
+
 export interface ClawHostInstanceRecord {
   id: string;
   instanceId: string;
@@ -283,6 +318,7 @@ export interface ClawHostInstanceRecord {
   healthStatus: ClawHostHealthStatusRecord;
   k8sNamespace: string;
   k8sPodName: string;
+  connectionInfo: ClawHostConnectionInfoRecord;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1034,13 +1070,49 @@ function inferTaskType(value: unknown): VideoTaskType {
   return "brand_replace";
 }
 
+function normalizeUserRoleKey(value: unknown, userType?: unknown): UserRoleKey {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (normalized === "super_admin") {
+    return "super_admin";
+  }
+
+  if (normalized === "admin" || normalized === "enterprise_admin" || normalized === "owner") {
+    return "admin";
+  }
+
+  if (normalized === "editor" || normalized === "operator") {
+    return "editor";
+  }
+
+  if (normalized === "viewer" || normalized === "employee" || normalized === "member") {
+    return "viewer";
+  }
+
+  return String(userType || "").trim().toLowerCase() === "enterprise" ? "viewer" : "user";
+}
+
+export function formatUserRoleLabel(role?: string | null) {
+  switch ((role || "").trim().toLowerCase()) {
+    case "super_admin":
+      return "超级管理员";
+    case "admin":
+    case "enterprise_admin":
+      return "企业管理员";
+    case "editor":
+    case "operator":
+      return "运营成员";
+    case "viewer":
+    case "employee":
+      return "员工";
+    default:
+      return "个人用户";
+  }
+}
+
 function normalizeUser(raw: unknown): User {
   const record = objectValue(raw) || {};
-  const roleRaw = String(record.role || record.userType || "").toLowerCase();
-  const role: User["role"] =
-    roleRaw.includes("admin") || roleRaw.includes("owner") || roleRaw.includes("enterprise")
-      ? "admin"
-      : "user";
+  const role = normalizeUserRoleKey(record.role, record.userType);
   const bindings = arrayValue(record.imBindings);
   const wechatBinding = bindings.find((item) => {
     const binding = objectValue(item);
@@ -1053,6 +1125,8 @@ function normalizeUser(raw: unknown): User {
     email: stringOrUndefined(record.email),
     phone: stringValue(record.phone),
     role,
+    roleScope: role === "super_admin" || role === "admin" ? "admin" : "user",
+    roleLabel: formatUserRoleLabel(role),
     wechatId: stringOrUndefined(record.wechatId) || stringOrUndefined(objectValue(wechatBinding)?.openId),
     orgId: stringOrUndefined(record.orgId) || null,
     userType: stringOrUndefined(record.userType),
@@ -1060,6 +1134,25 @@ function normalizeUser(raw: unknown): User {
     imBindings: bindings,
     lastLoginAt: stringOrUndefined(record.lastLoginAt),
     createdAt: stringOrUndefined(record.createdAt),
+  };
+}
+
+function normalizeEnterpriseInvite(raw: unknown): EnterpriseInviteRecord {
+  const record = objectValue(raw) || {};
+  const role = normalizeUserRoleKey(record.role, "enterprise");
+
+  return {
+    id: extractId(record, "enterprise_invite"),
+    orgId: stringValue(record.orgId),
+    orgName: stringOrUndefined(record.orgName),
+    phone: stringValue(record.phone),
+    role,
+    roleScope: role === "super_admin" || role === "admin" ? "admin" : "user",
+    roleLabel: formatUserRoleLabel(role),
+    status: stringValue(record.status, "pending"),
+    invitedAt: stringOrUndefined(record.invitedAt),
+    expiresAt: stringOrUndefined(record.expiresAt),
+    acceptedAt: stringOrUndefined(record.acceptedAt),
   };
 }
 
@@ -1506,6 +1599,26 @@ function normalizeClawHostInstalledSkill(raw: unknown): ClawHostInstalledSkillRe
   };
 }
 
+function normalizeClawHostConnectionInfo(raw: unknown): ClawHostConnectionInfoRecord {
+  const record = objectValue(raw) || {};
+
+  return {
+    deploymentMode: stringValue(record.deploymentMode, "byoc"),
+    requestedImChannel: stringValue(record.requestedImChannel),
+    accessUrl: stringValue(record.accessUrl),
+    installCommand: stringValue(record.installCommand),
+    connectionStatus: stringValue(record.connectionStatus, "waiting_for_bind"),
+    connectionCodePreview: stringValue(record.connectionCodePreview),
+    connectionCodeExpiresAt: stringOrUndefined(record.connectionCodeExpiresAt) ?? null,
+    boundApiKeyPrefix: stringValue(record.boundApiKeyPrefix),
+    boundAt: stringOrUndefined(record.boundAt) ?? null,
+    lastHeartbeatAt: stringOrUndefined(record.lastHeartbeatAt) ?? null,
+    lastClientVersion: stringValue(record.lastClientVersion),
+    lastAgentId: stringValue(record.lastAgentId),
+    heartbeatCapabilities: arrayValue(record.heartbeatCapabilities).map((item) => stringValue(item)),
+  };
+}
+
 function normalizeClawHostInstance(raw: unknown): ClawHostInstanceRecord {
   const record = objectValue(raw) || {};
 
@@ -1524,6 +1637,7 @@ function normalizeClawHostInstance(raw: unknown): ClawHostInstanceRecord {
     healthStatus: normalizeClawHostHealthStatus(record.healthStatus),
     k8sNamespace: stringValue(record.k8sNamespace),
     k8sPodName: stringValue(record.k8sPodName),
+    connectionInfo: normalizeClawHostConnectionInfo(record.connectionInfo),
     createdAt: stringOrUndefined(record.createdAt),
     updatedAt: stringOrUndefined(record.updatedAt),
   };
@@ -2371,6 +2485,16 @@ const adminApi = {
   },
 };
 
+const orgApi = {
+  members: async () => {
+    const raw = await requestWithFallbackData<unknown>([
+      { url: "/v1/org/members" },
+      { url: "/v1/users" },
+    ]);
+    return toResult(normalizePaginated(raw, (item) => normalizeUser(item)).items);
+  },
+};
+
 const billingApi = {
   balance: async () => accountApi.get(),
   orders: async (params?: Record<string, unknown>) => paymentApi.orders(params),
@@ -2697,6 +2821,8 @@ const clawhostApi = {
   create: async (data: {
     clientName: string;
     config: ClawHostInstanceConfigRecord;
+    deploymentMode?: string;
+    requestedImChannel?: string;
   }) =>
     toResult(
       normalizeClawHostInstance(
@@ -2721,6 +2847,18 @@ const clawhostApi = {
     request<{ instanceId: string; removedSkillId: string; installedSkills: number }>({
       url: `/v1/clawhost/instances/${instanceId}/skills/${skillId}`,
       method: "DELETE",
+    }),
+  issueConnectionCode: (instanceId: string) =>
+    request<{
+      instanceId: string;
+      code: string;
+      preview: string;
+      expiresAt: string;
+      installCommand: string;
+      accessUrl: string;
+    }>({
+      url: `/v1/clawhost/instances/${instanceId}/connection-code`,
+      method: "POST",
     }),
 };
 
@@ -2755,6 +2893,31 @@ const authApi = {
       method: "POST",
       data: { code },
     }),
+  enterpriseInvites: {
+    list: async () => {
+      const raw = await requestData<unknown>({
+        url: "/v1/auth/enterprise/invites",
+      });
+      const items = Array.isArray(raw)
+        ? raw.map((item) => normalizeEnterpriseInvite(item))
+        : arrayValue(objectValue(raw)?.items).map((item) => normalizeEnterpriseInvite(item));
+      return toResult(items);
+    },
+    invite: async (data: { phone: string; role: string }) => {
+      const raw = await requestData<unknown>({
+        url: "/v1/auth/enterprise/invite",
+        method: "POST",
+        data,
+      });
+      return toResult(normalizeEnterpriseInvite(raw));
+    },
+    accept: (data: { token: string; phone: string; code: string }) =>
+      request<AuthResponse>({
+        url: "/v1/auth/enterprise/accept-invite",
+        method: "POST",
+        data,
+      }),
+  },
 };
 
 export const api = {
@@ -2765,6 +2928,7 @@ export const api = {
   brand: brandsApi,
   calendar: calendarApi,
   admin: adminApi,
+  org: orgApi,
   account: accountApi,
   billing: billingApi,
   payment: paymentApi,

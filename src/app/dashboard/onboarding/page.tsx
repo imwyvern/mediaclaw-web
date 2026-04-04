@@ -15,6 +15,7 @@ import {
   RefreshCcw,
   Sparkles,
   Target,
+  Users,
   WalletCards,
 } from "lucide-react";
 
@@ -42,11 +43,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   api,
+  formatUserRoleLabel,
   readApiErrorMessage,
   type AccountPack,
   type AccountSnapshot,
   type Brand,
   type ClawHostInstanceRecord,
+  type EnterpriseInviteRecord,
+  type User,
 } from "@/lib/api";
 import { formatCompactNumber, formatDate } from "@/lib/format";
 import {
@@ -61,9 +65,9 @@ import { useAuthStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type OpenClawPreference = "enable" | "skip";
 
 interface IndustryOption {
@@ -107,12 +111,19 @@ const VIDEO_STYLE_OPTIONS = [
   { value: "ugc", label: "原生 UGC" },
 ];
 
+const MEMBER_ROLE_OPTIONS = [
+  { value: "admin", label: "企业管理员" },
+  { value: "editor", label: "运营成员" },
+  { value: "viewer", label: "员工" },
+] as const;
+
 const STEP_TITLES: Record<Step, string> = {
   1: "保存行业方向",
   2: "创建首个品牌",
-  3: "启用 OpenClaw",
-  4: "确认试用额度",
-  5: "进入控制台",
+  3: "邀请团队成员",
+  4: "启用 OpenClaw",
+  5: "确认试用额度",
+  6: "进入控制台",
 };
 
 async function fetchAccountSnapshot() {
@@ -371,25 +382,34 @@ export default function OnboardingPage() {
   const [createdBrand, setCreatedBrand] = useState<Brand | null>(null);
   const [openClawPreference, setOpenClawPreference] = useState<OpenClawPreference>("enable");
   const [openClawInstance, setOpenClawInstance] = useState<ClawHostInstanceRecord | null>(null);
+  const [orgMembers, setOrgMembers] = useState<User[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<EnterpriseInviteRecord[]>([]);
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteRole, setInviteRole] = useState<(typeof MEMBER_ROLE_OPTIONS)[number]["value"]>("editor");
 
   const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [openClawLoading, setOpenClawLoading] = useState(true);
   const [openClawLoadError, setOpenClawLoadError] = useState<string | null>(null);
+  const [teamLoading, setTeamLoading] = useState(Boolean(authUser?.orgId));
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [brandSubmitting, setBrandSubmitting] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [openClawSubmitting, setOpenClawSubmitting] = useState(false);
   const [navigating, setNavigating] = useState(false);
 
   const [profileError, setProfileError] = useState<string | null>(null);
   const [brandError, setBrandError] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [openClawError, setOpenClawError] = useState<string | null>(null);
 
   const selectedIndustryOption = INDUSTRY_OPTIONS.find((item) => item.value === selectedIndustry) || null;
   const hasAccountData = accountSnapshot ? hasAccountSnapshotValue(accountSnapshot) : false;
   const mediaclawClientInstalled = hasOpenClawSkill(openClawInstance);
+  const hasEnterpriseWorkspace = Boolean(authUser?.orgId);
 
   useEffect(() => {
     let cancelled = false;
@@ -458,6 +478,64 @@ export default function OnboardingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTeamSetup = async () => {
+      if (!authUser?.orgId) {
+        if (!cancelled) {
+          setOrgMembers(authUser ? [authUser] : []);
+          setPendingInvites([]);
+          setTeamError(null);
+          setTeamLoading(false);
+        }
+        return;
+      }
+
+      setTeamLoading(true);
+      setTeamError(null);
+
+      const [membersResult, invitesResult] = await Promise.allSettled([
+        api.org.members(),
+        api.auth.enterpriseInvites.list(),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (membersResult.status === "fulfilled") {
+        setOrgMembers(membersResult.value.data);
+      } else {
+        setOrgMembers([]);
+      }
+
+      if (invitesResult.status === "fulfilled") {
+        setPendingInvites(invitesResult.value.data);
+      } else {
+        setPendingInvites([]);
+      }
+
+      if (membersResult.status === "rejected" && invitesResult.status === "rejected") {
+        setTeamError(readApiErrorMessage(membersResult.reason, "团队成员加载失败，请稍后重试。"));
+      } else if (membersResult.status === "rejected") {
+        setTeamError(readApiErrorMessage(membersResult.reason, "成员列表加载失败，请稍后重试。"));
+      } else if (invitesResult.status === "rejected") {
+        setTeamError(readApiErrorMessage(invitesResult.reason, "邀请记录加载失败，请稍后重试。"));
+      } else {
+        setTeamError(null);
+      }
+
+      setTeamLoading(false);
+    };
+
+    void loadTeamSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser]);
+
   const refreshAccountSnapshot = async (notifyOnSuccess = false) => {
     setAccountLoading(true);
     setAccountError(null);
@@ -472,6 +550,33 @@ export default function OnboardingPage() {
       setAccountError(readApiErrorMessage(error, "账户额度加载失败，请稍后重试。"));
     } finally {
       setAccountLoading(false);
+    }
+  };
+
+  const refreshTeamSetup = async (notifyOnSuccess = false) => {
+    if (!hasEnterpriseWorkspace) {
+      setOrgMembers(authUser ? [authUser] : []);
+      setPendingInvites([]);
+      return;
+    }
+
+    setTeamLoading(true);
+    setTeamError(null);
+
+    try {
+      const [membersResponse, invitesResponse] = await Promise.all([
+        api.org.members(),
+        api.auth.enterpriseInvites.list(),
+      ]);
+      setOrgMembers(membersResponse.data);
+      setPendingInvites(invitesResponse.data);
+      if (notifyOnSuccess) {
+        toast.success("团队成员信息已刷新");
+      }
+    } catch (error) {
+      setTeamError(readApiErrorMessage(error, "团队成员加载失败，请稍后重试。"));
+    } finally {
+      setTeamLoading(false);
     }
   };
 
@@ -533,12 +638,56 @@ export default function OnboardingPage() {
       setBrandName(brand.name);
       toast.success("品牌已创建");
       setStep(3);
+      void refreshTeamSetup();
       void refreshAccountSnapshot();
     } catch (error) {
       setBrandError(readApiErrorMessage(error, "品牌创建失败，请稍后重试。"));
     } finally {
       setBrandSubmitting(false);
     }
+  };
+
+  const handleInviteMember = async () => {
+    if (!hasEnterpriseWorkspace) {
+      toast.message("当前账号未绑定企业空间", {
+        description: "个人体验账号暂不需要邀请团队成员，可以直接继续下一步。",
+      });
+      return;
+    }
+
+    if (!invitePhone || invitePhone.length < 11) {
+      setInviteError("请输入有效的团队成员手机号。");
+      return;
+    }
+
+    setInviteSubmitting(true);
+    setInviteError(null);
+
+    try {
+      const response = await api.auth.enterpriseInvites.invite({
+        phone: invitePhone,
+        role: inviteRole,
+      });
+      setPendingInvites((current) => [response.data, ...current.filter((item) => item.id !== response.data.id)]);
+      setInvitePhone("");
+      toast.success("邀请已发送", {
+        description: `${invitePhone} 已收到企业加入邀请短信。`,
+      });
+    } catch (error) {
+      setInviteError(readApiErrorMessage(error, "邀请成员失败，请稍后重试。"));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
+
+  const handleContinueFromTeam = async () => {
+    if (hasEnterpriseWorkspace && orgMembers.length === 0 && pendingInvites.length === 0) {
+      toast.message("当前还没有团队成员", {
+        description: "你可以现在发送邀请，也可以稍后在管理员后台继续添加成员。",
+      });
+    }
+
+    setStep(4);
   };
 
   const refreshOpenClawInstance = async (instanceId: string) => {
@@ -559,7 +708,7 @@ export default function OnboardingPage() {
   const handleConfigureOpenClaw = async () => {
     if (openClawPreference === "skip") {
       setOpenClawError(null);
-      setStep(4);
+      setStep(5);
       return;
     }
 
@@ -578,6 +727,8 @@ export default function OnboardingPage() {
             authUser?.phone,
           ]),
           config: DEFAULT_OPENCLAW_INSTANCE_CONFIG,
+          deploymentMode: "byoc",
+          requestedImChannel: "feishu",
         });
         instance = created.data;
         setOpenClawInstance(instance);
@@ -593,7 +744,7 @@ export default function OnboardingPage() {
       }
 
       await refreshOpenClawInstance(instance.instanceId);
-      setStep(4);
+      setStep(5);
     } catch (error) {
       setOpenClawError(readApiErrorMessage(error, "OpenClaw 启用失败，请稍后重试。"));
     } finally {
@@ -759,9 +910,198 @@ export default function OnboardingPage() {
       return (
         <GlassCard>
           <CardHeader className="pb-4">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-xs font-medium text-fuchsia-100">
+              <Users className="h-3.5 w-3.5" />
+              Step 3
+            </div>
+            <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+              邀请你的团队成员
+            </CardTitle>
+            <CardDescription className="max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
+              企业管理员可以直接邀请运营和员工加入当前组织。这里会展示真实成员列表和待接受邀请，完成企业开通闭环。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {!hasEnterpriseWorkspace ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-5 text-sm leading-7 text-slate-300">
+                当前账号还没有企业空间，团队邀请仅对企业注册用户开放。你可以继续后续步骤，或稍后升级为企业版后再邀请成员。
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-phone" className="text-slate-100">
+                      成员手机号
+                    </Label>
+                    <Input
+                      id="invite-phone"
+                      placeholder="请输入要邀请的手机号"
+                      className="h-12 border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500"
+                      value={invitePhone}
+                      onChange={(event) => {
+                        setInvitePhone(event.target.value.replace(/\D/g, "").slice(0, 11));
+                        if (inviteError) {
+                          setInviteError(null);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-role" className="text-slate-100">
+                      成员角色
+                    </Label>
+                    <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as typeof inviteRole)}>
+                      <SelectTrigger id="invite-role" className="h-12 w-full border-white/10 bg-white/[0.04] text-white">
+                        <SelectValue placeholder="选择角色" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEMBER_ROLE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button size="lg" className="gap-2" onClick={handleInviteMember} disabled={inviteSubmitting}>
+                    {inviteSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                    发送邀请
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                    onClick={() => {
+                      void refreshTeamSetup(true);
+                    }}
+                    disabled={teamLoading}
+                  >
+                    {teamLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+                    刷新团队信息
+                  </Button>
+                </div>
+
+                {inviteError ? (
+                  <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-red-100">
+                    {inviteError}
+                  </div>
+                ) : null}
+
+                {teamError ? (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                    {teamError}
+                  </div>
+                ) : null}
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">当前组织成员</div>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">来自真实 `/api/v1/org/members` 数据。</p>
+                      </div>
+                      <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                        {orgMembers.length} 人
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {teamLoading ? (
+                        <Skeleton className="h-24 w-full bg-white/10" />
+                      ) : orgMembers.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm leading-6 text-slate-400">
+                          当前还没有其他成员加入，发送邀请后会在这里看到他们。
+                        </div>
+                      ) : (
+                        orgMembers.map((member) => (
+                          <div key={member.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-white">{member.name || member.phone}</div>
+                                <div className="mt-1 text-xs text-slate-400">{member.phone || "未填写手机号"}</div>
+                              </div>
+                              <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200">
+                                {member.roleLabel}
+                              </span>
+                            </div>
+                            <div className="mt-3 text-xs text-slate-400">
+                              加入时间 {formatDate(member.createdAt || member.lastLoginAt)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">待接受邀请</div>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">企业成员收到短信验证码后即可加入当前组织。</p>
+                      </div>
+                      <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                        {pendingInvites.length} 条
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {teamLoading ? (
+                        <Skeleton className="h-24 w-full bg-white/10" />
+                      ) : pendingInvites.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm leading-6 text-slate-400">
+                          当前没有待接受邀请。你可以先邀请 1-2 位运营成员，后续在 Dashboard 里一起协作。
+                        </div>
+                      ) : (
+                        pendingInvites.map((invite) => (
+                          <div key={invite.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-white">{invite.phone}</div>
+                                <div className="mt-1 text-xs text-slate-400">
+                                  {invite.roleLabel} · {invite.status === "pending" ? "等待接受" : invite.status}
+                                </div>
+                              </div>
+                              <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+                                {formatDate(invite.expiresAt)}
+                              </span>
+                            </div>
+                            <div className="mt-3 text-xs text-slate-400">
+                              邀请时间 {formatDate(invite.invitedAt)} · 角色 {formatUserRoleLabel(invite.role)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(2)}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                返回
+              </Button>
+              <Button size="lg" className="gap-2" onClick={() => void handleContinueFromTeam()}>
+                <ChevronRight className="h-4 w-4" />
+                继续下一步
+              </Button>
+            </div>
+          </CardContent>
+        </GlassCard>
+      );
+    }
+
+    if (step === 4) {
+      return (
+        <GlassCard>
+          <CardHeader className="pb-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100">
               <Bot className="h-3.5 w-3.5" />
-              Step 3
+              Step 4
             </div>
             <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
               是否启用 AI 助手（OpenClaw）
@@ -859,7 +1199,7 @@ export default function OnboardingPage() {
             ) : null}
 
             <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(2)}>
+              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(3)}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
                 返回
               </Button>
@@ -882,13 +1222,13 @@ export default function OnboardingPage() {
       );
     }
 
-    if (step === 4) {
+    if (step === 5) {
       return (
         <GlassCard>
           <CardHeader className="pb-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-100">
               <Coins className="h-3.5 w-3.5" />
-              Step 4
+              Step 5
             </div>
             <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
               确认你的试用包与账户余额
@@ -984,11 +1324,11 @@ export default function OnboardingPage() {
             ) : null}
 
             <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(3)}>
+              <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(4)}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
                 返回
               </Button>
-              <Button size="lg" className="gap-2" onClick={() => setStep(5)} disabled={accountLoading || !accountSnapshot}>
+              <Button size="lg" className="gap-2" onClick={() => setStep(6)} disabled={accountLoading || !accountSnapshot}>
                 <ChevronRight className="h-4 w-4" />
                 继续
               </Button>
@@ -1003,17 +1343,17 @@ export default function OnboardingPage() {
         <CardHeader className="pb-4">
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-100">
             <Check className="h-3.5 w-3.5" />
-            Step 5
+            Step 6
           </div>
           <CardTitle className="text-3xl font-black tracking-tight text-white sm:text-4xl">
             环境已经准备好
           </CardTitle>
           <CardDescription className="max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
-            行业信息已保存，品牌已创建，OpenClaw 选择已确认，账户余额也已用真实快照确认。最后一步直接进入 `/dashboard`。
+            行业信息已保存，品牌已创建，团队邀请入口已就绪，OpenClaw 选择已确认，账户余额也已用真实快照确认。最后一步直接进入 `/dashboard`。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <MetricCard
               label="行业方向"
               value={selectedIndustryOption?.label || "未设置"}
@@ -1025,6 +1365,20 @@ export default function OnboardingPage() {
               value={createdBrand?.name || "未创建"}
               hint="当前 onboarding 已调用品牌创建接口完成初始化。"
               icon={BriefcaseBusiness}
+            />
+            <MetricCard
+              label="团队成员"
+              value={
+                hasEnterpriseWorkspace
+                  ? `${orgMembers.length} 人 / ${pendingInvites.length} 邀请`
+                  : "个人空间"
+              }
+              hint={
+                hasEnterpriseWorkspace
+                  ? "成员列表和待接受邀请都来自真实组织接口。"
+                  : "个人体验账号不需要团队协作配置。"
+              }
+              icon={Users}
             />
             <MetricCard
               label="OpenClaw"
@@ -1051,7 +1405,7 @@ export default function OnboardingPage() {
           </div>
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(4)}>
+            <Button variant="outline" size="lg" className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" onClick={() => setStep(5)}>
               <ChevronLeft className="mr-2 h-4 w-4" />
               返回
             </Button>
@@ -1130,6 +1484,18 @@ export default function OnboardingPage() {
                 <StepStatusItem
                   step={3}
                   currentStep={step}
+                  title="团队成员"
+                  description={
+                    hasEnterpriseWorkspace
+                      ? orgMembers.length > 0 || pendingInvites.length > 0
+                        ? `已加入 ${orgMembers.length} 人，待接受邀请 ${pendingInvites.length} 个。`
+                        : "当前还没有团队成员，可以继续邀请。"
+                      : "当前为个人体验账号，无需配置企业团队。"
+                  }
+                />
+                <StepStatusItem
+                  step={4}
+                  currentStep={step}
                   title="OpenClaw 助手"
                   description={
                     openClawPreference === "skip"
@@ -1142,7 +1508,7 @@ export default function OnboardingPage() {
                   }
                 />
                 <StepStatusItem
-                  step={4}
+                  step={5}
                   currentStep={step}
                   title="试用额度"
                   description={
@@ -1154,7 +1520,7 @@ export default function OnboardingPage() {
                   }
                 />
                 <StepStatusItem
-                  step={5}
+                  step={6}
                   currentStep={step}
                   title="进入控制台"
                   description="完成最后确认后直接跳转到 dashboard。"

@@ -73,6 +73,18 @@ function formatPercent(value: number) {
 function getStatusBadgeClass(status: string) {
   const normalized = status.trim().toLowerCase();
 
+  if (["super_admin", "admin", "enterprise_admin"].includes(normalized)) {
+    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-100";
+  }
+
+  if (["editor", "operator"].includes(normalized)) {
+    return "border-sky-500/20 bg-sky-500/10 text-sky-100";
+  }
+
+  if (["viewer", "employee"].includes(normalized)) {
+    return "border-slate-500/20 bg-slate-500/10 text-slate-200";
+  }
+
   if (["healthy", "operational", "ok", "up", "online", "active", "paid"].includes(normalized)) {
     return "border-emerald-500/20 bg-emerald-500/10 text-emerald-100";
   }
@@ -664,7 +676,7 @@ export default function AdminPage() {
                         <TableCell className="text-slate-400">{member.email || "未填写"}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusBadgeClass(member.role)}>
-                            {member.role}
+                            {member.roleLabel}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-slate-400">
