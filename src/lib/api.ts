@@ -3055,16 +3055,8 @@ const settingsApi = {
       });
       return toResult(normalizeNotification(raw));
     },
-    remove: async (id: string) =>
-      requestWithFallback([
-        { url: `/v1/settings/notifications/${id}`, method: "DELETE" },
-        { url: `/v1/notifications/${id}`, method: "DELETE" },
-      ]),
-    test: async (id: string) =>
-      requestWithFallback([
-        { url: `/v1/settings/notifications/${id}/test`, method: "POST" },
-        { url: `/v1/notifications/${id}/test`, method: "POST" },
-      ]),
+    remove: async (id: string) => request({ url: `/v1/notifications/${id}`, method: "DELETE" }),
+    test: async (id: string) => request({ url: `/v1/notifications/${id}/test`, method: "POST" }),
   },
 };
 
