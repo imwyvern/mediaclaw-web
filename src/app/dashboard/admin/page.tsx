@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   Building2,
@@ -45,6 +46,7 @@ import {
   type PaginatedResponse,
   type User,
 } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
 
 const EMPTY_AUDIT_LOGS: PaginatedResponse<AuditLogEntry> = {
   items: [],
@@ -141,10 +143,16 @@ function TableSkeleton({ columns = 5, rows = 5 }: { columns?: number; rows?: num
 }
 
 export default function AdminPage() {
+  const router = useRouter();
+  const storedUser = useAuthStore((state) => state.user);
+
   const [clients, setClients] = useState<AdminClientRecord[]>([]);
   const [health, setHealth] = useState<AdminHealthStatus | null>(null);
   const [auditLogs, setAuditLogs] = useState<PaginatedResponse<AuditLogEntry>>(EMPTY_AUDIT_LOGS);
   const [members, setMembers] = useState<User[]>([]);
+  const [accessState, setAccessState] = useState<"checking" | "granted" | "denied">(
+    storedUser?.role ? (storedUser.role === "super_admin" ? "granted" : "denied") : "checking",
+  );
 
   const [pageLoading, setPageLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -214,12 +222,45 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    const resolveAccess = async () => {
+      if (storedUser?.role) {
+        setAccessState(storedUser.role === "super_admin" ? "granted" : "denied");
+        return;
+      }
+
+      try {
+        const response = await api.account.info();
+        if (!cancelled) {
+          setAccessState(response.data.role === "super_admin" ? "granted" : "denied");
+        }
+      } catch {
+        if (!cancelled) {
+          setAccessState("denied");
+        }
+      }
+    };
+
+    void resolveAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storedUser?.role]);
+
+  useEffect(() => {
+    if (accessState !== "granted") {
+      setPageLoading(accessState === "checking");
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       void loadAdminData();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [accessState]);
 
   const totalVideos = useMemo(() => {
     return clients.reduce((sum, client) => sum + client.videoCount, 0);
@@ -239,6 +280,31 @@ export default function AdminPage() {
       return ["healthy", "operational", "ok", "up", "online"].includes(normalized);
     }).length;
   }, [health]);
+
+  if (accessState === "denied") {
+    return (
+      <div className="flex flex-col gap-8 pb-8">
+        <MetadataUpdater title="管理后台" />
+        <Card className="border-rose-500/20 bg-rose-500/5">
+          <CardHeader>
+            <CardTitle className="text-white">无权限访问管理后台</CardTitle>
+            <CardDescription className="text-slate-300">
+              该页面仅向超级管理员开放，企业管理员请返回工作台使用组织级管理入口。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
+              onClick={() => router.replace("/dashboard")}
+            >
+              返回概览
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8 pb-8">
@@ -291,7 +357,7 @@ export default function AdminPage() {
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div>
                   <CardTitle className="text-sm text-slate-300">服务健康度</CardTitle>
-                  <CardDescription className="text-slate-400">来自 health/status 的实时状态</CardDescription>
+                  <CardDescription className="text-slate-400">来自 `/v1/health/status` 的聚合状态</CardDescription>
                 </div>
                 <Server className="h-4 w-4 text-emerald-300" />
               </CardHeader>
@@ -372,7 +438,7 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle className="text-white">客户组织</CardTitle>
                 <CardDescription className="text-slate-400">
-                  来自 `/client-mgmt/clients` 的真实组织数据。
+                  来自 `/v1/admin/orgs` 的真实组织数据。
                 </CardDescription>
               </CardHeader>
               <CardContent>

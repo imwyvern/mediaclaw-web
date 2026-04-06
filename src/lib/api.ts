@@ -59,7 +59,13 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
-export type UserRoleKey = "super_admin" | "admin" | "editor" | "viewer" | "user";
+export type UserRoleKey =
+  | "super_admin"
+  | "enterprise_admin"
+  | "admin"
+  | "editor"
+  | "viewer"
+  | "user";
 export type UserRoleScope = "admin" | "user";
 
 export interface User {
@@ -1198,7 +1204,11 @@ function normalizeUserRoleKey(value: unknown, userType?: unknown): UserRoleKey {
     return "super_admin";
   }
 
-  if (normalized === "admin" || normalized === "enterprise_admin" || normalized === "owner") {
+  if (normalized === "enterprise_admin") {
+    return "enterprise_admin";
+  }
+
+  if (normalized === "admin" || normalized === "owner") {
     return "admin";
   }
 
@@ -1246,7 +1256,10 @@ function normalizeUser(raw: unknown): User {
     email: stringOrUndefined(record.email),
     phone: stringValue(record.phone),
     role,
-    roleScope: role === "super_admin" || role === "admin" ? "admin" : "user",
+    roleScope:
+      role === "super_admin" || role === "enterprise_admin" || role === "admin"
+        ? "admin"
+        : "user",
     roleLabel: formatUserRoleLabel(role),
     wechatId: stringOrUndefined(record.wechatId) || stringOrUndefined(objectValue(wechatBinding)?.openId),
     orgId: stringOrUndefined(record.orgId) || null,
@@ -1268,7 +1281,10 @@ function normalizeEnterpriseInvite(raw: unknown): EnterpriseInviteRecord {
     orgName: stringOrUndefined(record.orgName),
     phone: stringValue(record.phone),
     role,
-    roleScope: role === "super_admin" || role === "admin" ? "admin" : "user",
+    roleScope:
+      role === "super_admin" || role === "enterprise_admin" || role === "admin"
+        ? "admin"
+        : "user",
     roleLabel: formatUserRoleLabel(role),
     status: stringValue(record.status, "pending"),
     invitedAt: stringOrUndefined(record.invitedAt),
@@ -2792,7 +2808,6 @@ const calendarApi = {
       status: params?.status || "scheduled",
     });
     const raw = await requestWithFallbackData<unknown>([
-      { url: "/v1/task-mgmt/tasks", params: query },
       { url: "/v1/tasks", params: query },
       { url: "/v1/videos", params: query },
     ]);
@@ -2802,24 +2817,15 @@ const calendarApi = {
 
 const adminApi = {
   clients: async () => {
-    const raw = await requestWithFallbackData<unknown>([
-      { url: "/v1/client-mgmt/clients" },
-      { url: "/v1/org/clients" },
-    ]);
+    const raw = await requestData<unknown>({ url: "/v1/admin/orgs" });
     return toResult(normalizePaginated(raw, (item) => normalizeAdminClient(item)).items);
   },
   health: async () => {
-    const raw = await requestWithFallbackData<unknown>([
-      { url: "/v1/health/status" },
-      { url: "/v1/health" },
-    ]);
+    const raw = await requestData<unknown>({ url: "/v1/health/status" });
     return toResult(normalizeAdminHealthStatus(raw));
   },
   auditLogs: async (params?: { page?: number; limit?: number }) => {
-    const raw = await requestWithFallbackData<unknown>([
-      { url: "/v1/audit/logs", params },
-      { url: "/v1/audit", params },
-    ]);
+    const raw = await requestData<unknown>({ url: "/v1/audit-logs", params });
     return toResult(normalizePaginated(raw, (item) => normalizeAuditLog(item)));
   },
   members: async () => {
@@ -2950,13 +2956,8 @@ const pipelinesApi = {
 const settingsApi = {
   apiKeys: {
     list: async () => {
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/api-keys" },
-        { url: "/v1/apikey" },
-      ]);
-      const items = Array.isArray(raw)
-        ? raw.map((item) => normalizeApiKey(item))
-        : arrayValue(objectValue(raw)?.items).map((item) => normalizeApiKey(item));
+      const raw = await requestData<unknown>({ url: "/v1/apikey" });
+      const items = arrayValue(raw).map((item) => normalizeApiKey(item));
       return toResult(items);
     },
     add: async (data: Record<string, unknown>) => {
@@ -2965,45 +2966,30 @@ const settingsApi = {
         permissions: Array.isArray(data.permissions) ? data.permissions : undefined,
         expiresAt: stringOrUndefined(data.expiresAt),
       });
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/api-keys", method: "POST", data: payload },
-        { url: "/v1/apikey", method: "POST", data: payload },
-      ]);
+      const raw = await requestData<unknown>({
+        url: "/v1/apikey",
+        method: "POST",
+        data: payload,
+      });
       return toResult(normalizeApiKey(raw));
     },
-    remove: async (id: string) =>
-      requestWithFallback([
-        { url: `/v1/settings/api-keys/${id}`, method: "DELETE" },
-        { url: `/v1/apikey/${id}`, method: "DELETE" },
-      ]),
+    remove: async (id: string) => request({ url: `/v1/apikey/${id}`, method: "DELETE" }),
     validate: async (data: Record<string, unknown>) => {
-      try {
-        const raw = await requestWithFallbackData<unknown>(
-          [{ url: "/v1/settings/api-keys/validate", method: "POST", data }],
-          { suppressErrorToast: true },
-        );
-        const record = objectValue(raw) || {};
-        return toResult({
-          valid: booleanValue(record.valid, true),
-          message: stringOrUndefined(record.message),
-        });
-      } catch (error) {
-        if (shouldTryFallback(error, new Set([404, 405]))) {
-          return toResult({
-            valid: Boolean(stringOrUndefined(data.key) || stringOrUndefined(data.prefix)),
-            message: undefined,
-          });
-        }
-        throw error;
-      }
+      const raw = await requestData<unknown>({
+        url: "/v1/apikey/validate",
+        method: "POST",
+        data,
+      });
+      const record = objectValue(raw) || {};
+      return toResult({
+        valid: booleanValue(record.valid, true),
+        message: stringOrUndefined(record.message),
+      });
     },
   },
   webhooks: {
     list: async () => {
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/webhooks" },
-        { url: "/v1/webhook" },
-      ]);
+      const raw = await requestData<unknown>({ url: "/v1/webhook" });
       const items = Array.isArray(raw)
         ? raw.map((item) => normalizeWebhook(item))
         : arrayValue(objectValue(raw)?.items).map((item) => normalizeWebhook(item));
@@ -3017,10 +3003,11 @@ const settingsApi = {
         events: Array.isArray(data.events) ? data.events : undefined,
         isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
       });
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/webhooks", method: "POST", data: payload },
-        { url: "/v1/webhook", method: "POST", data: payload },
-      ]);
+      const raw = await requestData<unknown>({
+        url: "/v1/webhook",
+        method: "POST",
+        data: payload,
+      });
       return toResult(normalizeWebhook(raw));
     },
     update: async (id: string, data: Record<string, unknown>) => {
@@ -3031,17 +3018,14 @@ const settingsApi = {
         events: Array.isArray(data.events) ? data.events : undefined,
         isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
       });
-      const raw = await requestWithFallbackData<unknown>([
-        { url: `/v1/settings/webhooks/${id}`, method: "PUT", data: payload },
-        { url: `/v1/webhook/${id}`, method: "PATCH", data: payload },
-      ]);
+      const raw = await requestData<unknown>({
+        url: `/v1/webhook/${id}`,
+        method: "PATCH",
+        data: payload,
+      });
       return toResult(normalizeWebhook(raw));
     },
-    remove: async (id: string) =>
-      requestWithFallback([
-        { url: `/v1/settings/webhooks/${id}`, method: "DELETE" },
-        { url: `/v1/webhook/${id}`, method: "DELETE" },
-      ]),
+    remove: async (id: string) => request({ url: `/v1/webhook/${id}`, method: "DELETE" }),
   },
   notifications: {
     listFeed: async (params?: { page?: number; limit?: number }) => {
@@ -3052,10 +3036,7 @@ const settingsApi = {
       return toResult(normalizeNotificationFeedList(raw));
     },
     get: async () => {
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/notifications" },
-        { url: "/v1/notifications" },
-      ]);
+      const raw = await requestData<unknown>({ url: "/v1/notifications" });
       return toResult(normalizeNotificationList(raw));
     },
     update: async (data: Record<string, unknown>) => {
@@ -3067,12 +3048,11 @@ const settingsApi = {
         config: objectValue(data.config),
         isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
       });
-      const raw = await requestWithFallbackData<unknown>([
-        { url: "/v1/settings/notifications", method: "PUT", data: { id, ...payload } },
-        id
-          ? { url: `/v1/notifications/${id}`, method: "PATCH", data: payload }
-          : { url: "/v1/notifications", method: "POST", data: payload },
-      ]);
+      const raw = await requestData<unknown>({
+        url: id ? `/v1/notifications/${id}` : "/v1/notifications",
+        method: id ? "PATCH" : "POST",
+        data: payload,
+      });
       return toResult(normalizeNotification(raw));
     },
     remove: async (id: string) =>

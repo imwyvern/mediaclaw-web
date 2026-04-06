@@ -65,6 +65,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  superAdminOnly?: boolean;
 }
 
 const navItems: readonly NavItem[] = [
@@ -79,7 +80,7 @@ const navItems: readonly NavItem[] = [
   { name: "Usage", href: "/dashboard/usage", icon: Activity },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { name: "Admin", href: "/dashboard/admin", icon: Shield, adminOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Shield, adminOnly: true, superAdminOnly: true },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ] as const;
 
@@ -120,6 +121,7 @@ function SidebarContent({
   remainingCredits,
   totalCredits,
   usagePercent,
+  role,
   roleScope,
   onItemClick,
 }: {
@@ -127,10 +129,15 @@ function SidebarContent({
   remainingCredits: number;
   totalCredits: number;
   usagePercent: number;
+  role?: User["role"];
   roleScope?: User["roleScope"];
   onItemClick?: () => void;
 }) {
-  const visibleNavItems = navItems.filter((item) => !item.adminOnly || roleScope === "admin");
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      (!item.adminOnly || roleScope === "admin")
+      && (!item.superAdminOnly || role === "super_admin"),
+  );
 
   return (
     <div className="flex h-full flex-col border-r bg-background">
@@ -271,6 +278,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           remainingCredits={remainingCredits}
           totalCredits={totalCredits}
           usagePercent={usagePercent}
+          role={currentUser?.role}
           roleScope={currentUser?.roleScope}
         />
       </aside>
@@ -291,6 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   remainingCredits={remainingCredits}
                   totalCredits={totalCredits}
                   usagePercent={usagePercent}
+                  role={currentUser?.role}
                   roleScope={currentUser?.roleScope}
                   onItemClick={() => setIsMobileOpen(false)}
                 />
