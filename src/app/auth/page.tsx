@@ -145,12 +145,11 @@ export default function AuthPage() {
 
     setIsRegisterSubmitting(true);
     try {
-      await api.auth.verifyCode(registerForm.adminPhone, registerForm.code);
-
       const res = await api.auth.registerEnterprise({
         orgName: registerForm.orgName.trim(),
         industry: registerForm.industry,
         adminPhone: registerForm.adminPhone,
+        code: registerForm.code,
       });
       const { accessToken, refreshToken, user } = res.data;
 

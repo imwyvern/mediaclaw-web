@@ -249,6 +249,7 @@ export interface EnterpriseRegisterData {
   orgName: string;
   industry: string;
   adminPhone: string;
+  code: string;
 }
 
 export interface EnterpriseInviteRecord {
