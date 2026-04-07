@@ -209,14 +209,35 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t py-12 bg-muted/20 text-sm text-muted-foreground">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center gap-2 font-bold text-foreground mb-4 md:mb-0">
-            <Video size={16} /> MediaClaw
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-foreground mb-3">
+                <Video size={16} /> MediaClaw 媒爪智能
+              </div>
+              <p className="text-xs leading-relaxed max-w-xs">AI 驱动的短视频智能生产平台，帮助品牌高效产出专业内容。</p>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">联系与办公</h4>
+              <ul className="space-y-1.5 text-xs">
+                <li>📍 深圳市福田区北环大道7037号3层</li>
+                <li>📱 13510869785</li>
+                <li>📧 contact@mediaclawbot.com</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">合规信息</h4>
+              <div className="flex flex-col gap-1.5 text-xs">
+                <Link href="/terms" className="hover:text-foreground">用户协议</Link>
+                <Link href="/privacy" className="hover:text-foreground">隐私政策</Link>
+                <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" className="hover:text-foreground">粤ICP备2023102599号-5</a>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-6">
-            <Link href="#" className="hover:text-foreground">Terms</Link>
-            <Link href="#" className="hover:text-foreground">Privacy</Link>
-            <Link href="#" className="hover:text-foreground">Documentation</Link>
+          <div className="border-t pt-6 text-center text-xs space-y-1">
+            <p>© 2026 媒爪智能 MediaClaw · 深圳市有微为网络科技有限公司</p>
+            <p>地址：深圳市福田区北环大道7037号3层 | 电话：13510869785</p>
+            <p><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" className="hover:text-foreground">粤ICP备2023102599号-5</a></p>
           </div>
         </div>
       </footer>
