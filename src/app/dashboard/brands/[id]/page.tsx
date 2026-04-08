@@ -332,11 +332,7 @@ export default function BrandDetailPage() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      void loadWorkspace();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    void loadWorkspace();
   }, [brandId]);
 
   const totalVideos = brand?.videos || videoTotal;

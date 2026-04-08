@@ -126,11 +126,7 @@ export default function BrandsPage() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadBrands();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    void loadBrands();
   }, []);
 
   const resetCreateState = () => {

@@ -1117,13 +1117,74 @@ function compactObject<T extends AnyRecord>(value: T): T {
   return next;
 }
 
+let fallbackIdCounter = 0;
+
+function nextFallbackId(prefix = "item") {
+  fallbackIdCounter += 1;
+  return `${prefix}_${fallbackIdCounter.toString(36)}`;
+}
+
+function hashString(value: string) {
+  let hash = 0;
+
+  for (const char of value) {
+    hash = ((hash * 31) + char.charCodeAt(0)) >>> 0;
+  }
+
+  return hash.toString(36);
+}
+
+function stableSerializeForId(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (depth >= 2) {
+    if (Array.isArray(value)) {
+      return `array:${value.length}`;
+    }
+
+    return typeof value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 5)
+      .map((item) => stableSerializeForId(item, depth + 1))
+      .join("|");
+  }
+
+  if (isRecord(value)) {
+    return Object.keys(value)
+      .sort()
+      .slice(0, 12)
+      .map((key) => `${key}:${stableSerializeForId(value[key], depth + 1)}`)
+      .join("|");
+  }
+
+  return typeof value;
+}
+
+function buildFallbackId(value: unknown, fallbackPrefix = "item") {
+  if (!isRecord(value)) {
+    return nextFallbackId(fallbackPrefix);
+  }
+
+  const serialized = stableSerializeForId(value);
+  return `${fallbackPrefix}_${hashString(serialized || fallbackPrefix)}`;
+}
+
 function extractId(value: unknown, fallbackPrefix = "item") {
   if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
 
   if (!isRecord(value)) {
-    return `${fallbackPrefix}_${Math.random().toString(36).slice(2, 8)}`;
+    return buildFallbackId(value, fallbackPrefix);
   }
 
   const candidate = value.id ?? value._id ?? value.orderId ?? value.taskId ?? value.videoTaskId;
@@ -1131,7 +1192,7 @@ function extractId(value: unknown, fallbackPrefix = "item") {
     return String(candidate);
   }
 
-  return `${fallbackPrefix}_${Math.random().toString(36).slice(2, 8)}`;
+  return buildFallbackId(value, fallbackPrefix);
 }
 
 function initials(value: string) {

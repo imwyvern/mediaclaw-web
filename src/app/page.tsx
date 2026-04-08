@@ -328,8 +328,8 @@ export default function LandingPage() {
               <div>
                 <h4 className="text-white font-medium mb-6 uppercase tracking-wider">联系与支持</h4>
                 <ul className="space-y-4">
-                  <li><a href="mailto:contact@mediaclaw.com" className="hover:text-[#00e8b8] transition-colors">contact@mediaclaw.com</a></li>
-                  <li><ComingSoonLink className="hover:text-[#00e8b8] transition-colors cursor-pointer">mediaclaw.com</ComingSoonLink></li>
+                  <li><a href="mailto:contact@mediaclawbot.com" className="hover:text-[#00e8b8] transition-colors">contact@mediaclawbot.com</a></li>
+                  <li><a href="https://mediaclawbot.com" className="hover:text-[#00e8b8] transition-colors">mediaclawbot.com</a></li>
                   <li>📍 深圳市福田区北环大道7037号3层</li>
                   <li>📱 13510869785</li>
                 </ul>

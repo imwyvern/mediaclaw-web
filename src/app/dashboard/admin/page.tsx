@@ -255,11 +255,7 @@ export default function AdminPage() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      void loadAdminData();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    void loadAdminData();
   }, [accessState]);
 
   const totalVideos = useMemo(() => {

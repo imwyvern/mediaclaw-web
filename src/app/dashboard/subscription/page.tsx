@@ -170,13 +170,7 @@ export default function SubscriptionPage() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadData();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    void loadData();
   }, []);
 
   const productMap = new Map(products.map((product) => [product.id, product]));

@@ -217,11 +217,7 @@ export default function CampaignsPage() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadCampaigns();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    void loadCampaigns();
   }, []);
 
   const openCampaignDetails = async (campaign: CampaignRecord) => {
