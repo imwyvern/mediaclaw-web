@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ComingSoonLink } from "@/components/coming-soon-link";
 import { ArrowRight, CheckCircle2, MessageSquare, TrendingUp, Copy, Eye, Search, Sparkles, Video } from "lucide-react";
 import { Metadata } from "next";
 
@@ -22,17 +23,17 @@ export default function LandingPage() {
         <nav className="hidden md:flex gap-8 text-sm font-medium text-white/70">
           <Link href="#capabilities" className="hover:text-[#00e8b8] transition-colors">核心能力</Link>
           <Link href="/pricing" className="hover:text-[#00e8b8] transition-colors">价格方案</Link>
-          <Link href="/auth" className="hover:text-[#00e8b8] transition-colors">控制台</Link>
+          <ComingSoonLink className="hover:text-[#00e8b8] transition-colors cursor-pointer">控制台</ComingSoonLink>
         </nav>
         <div className="flex items-center gap-4">
-          <Link href="/auth" className="hidden sm:block text-sm font-medium text-white/70 hover:text-white transition-colors">
+          <ComingSoonLink className="hidden sm:block text-sm font-medium text-white/70 hover:text-white transition-colors cursor-pointer">
             登录
-          </Link>
-          <Link href="/auth/register">
+          </ComingSoonLink>
+          <ComingSoonLink className="cursor-pointer">
             <Button className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold rounded-full px-6 h-10 transition-all hover:scale-105">
               开始使用
             </Button>
-          </Link>
+          </ComingSoonLink>
         </div>
       </header>
 
@@ -56,12 +57,12 @@ export default function LandingPage() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-5 w-full sm:w-auto">
-            <Link href="/auth/register">
+            <ComingSoonLink className="w-full sm:w-auto cursor-pointer">
               <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8 bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold rounded-full group">
                 立即安装龙虾智能体
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Button>
-            </Link>
+            </ComingSoonLink>
             <Link href="#capabilities">
               <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8 border-white/20 text-white hover:bg-white/5 hover:text-white rounded-full transition-colors">
                 了解核心能力
@@ -299,11 +300,11 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <Link href="/auth/register" className="relative z-10 inline-block">
+          <ComingSoonLink className="relative z-10 inline-block cursor-pointer">
             <Button size="lg" className="text-xl h-16 px-12 bg-[#00e8b8] text-[#0b0f1a] hover:bg-white hover:text-[#0b0f1a] font-black rounded-full transition-all hover:scale-105 shadow-[0_0_40px_rgba(0,232,184,0.2)] hover:shadow-[0_0_60px_rgba(0,232,184,0.4)]">
               开始使用 MediaClaw
             </Button>
-          </Link>
+          </ComingSoonLink>
           <p className="mt-8 text-white/50 relative z-10 text-lg">不需要迁移数据，不需要培训团队。安装智能体，说话就能用。</p>
         </section>
       </main>
@@ -328,7 +329,7 @@ export default function LandingPage() {
                 <h4 className="text-white font-medium mb-6 uppercase tracking-wider">联系与支持</h4>
                 <ul className="space-y-4">
                   <li><a href="mailto:contact@mediaclaw.com" className="hover:text-[#00e8b8] transition-colors">contact@mediaclaw.com</a></li>
-                  <li><a href="https://mediaclaw.com" className="hover:text-[#00e8b8] transition-colors">mediaclaw.com</a></li>
+                  <li><ComingSoonLink className="hover:text-[#00e8b8] transition-colors cursor-pointer">mediaclaw.com</ComingSoonLink></li>
                   <li>📍 深圳市福田区北环大道7037号3层</li>
                   <li>📱 13510869785</li>
                 </ul>
@@ -336,8 +337,8 @@ export default function LandingPage() {
               <div>
                 <h4 className="text-white font-medium mb-6 uppercase tracking-wider">合规信息</h4>
                 <div className="flex flex-col gap-4">
-                  <Link href="/terms" className="hover:text-[#00e8b8] transition-colors">用户协议</Link>
-                  <Link href="/privacy" className="hover:text-[#00e8b8] transition-colors">隐私政策</Link>
+                  <ComingSoonLink className="hover:text-[#00e8b8] transition-colors cursor-pointer">用户协议</ComingSoonLink>
+                  <ComingSoonLink className="hover:text-[#00e8b8] transition-colors cursor-pointer">隐私政策</ComingSoonLink>
                 </div>
               </div>
             </div>
