@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -327,12 +327,16 @@ export default function BrandDetailPage() {
     }
   };
 
+  const handleWorkspaceLoad = useEffectEvent(() => {
+    void loadWorkspace();
+  });
+
   useEffect(() => {
     if (!brandId) {
       return;
     }
 
-    void loadWorkspace();
+    handleWorkspaceLoad();
   }, [brandId]);
 
   const totalVideos = brand?.videos || videoTotal;

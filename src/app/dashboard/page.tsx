@@ -78,7 +78,7 @@ export default function DashboardPage() {
       ]);
       setOverview(dataOverviewRes.data);
       setAnalytics(analyticsRes.data);
-    } catch (loadError) {
+    } catch {
       setError("首页数据加载失败，请稍后重试。");
     } finally {
       setLoading(false);

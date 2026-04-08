@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useRouter } from "next/navigation";
 import {
@@ -154,7 +154,7 @@ export default function AdminPage() {
     storedUser?.role ? (storedUser.role === "super_admin" ? "granted" : "denied") : "checking",
   );
 
-  const [pageLoading, setPageLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(accessState === "granted");
   const [refreshing, setRefreshing] = useState(false);
 
   const [clientsError, setClientsError] = useState<string | null>(null);
@@ -166,7 +166,7 @@ export default function AdminPage() {
     if (options?.silent) {
       setRefreshing(true);
     } else {
-      setPageLoading(true);
+      setDataLoading(true);
     }
 
     setClientsError(null);
@@ -217,9 +217,13 @@ export default function AdminPage() {
       );
     }
 
-    setPageLoading(false);
+    setDataLoading(false);
     setRefreshing(false);
   };
+
+  const handleAdminDataLoad = useEffectEvent(() => {
+    void loadAdminData();
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -251,12 +255,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (accessState !== "granted") {
-      setPageLoading(accessState === "checking");
       return;
     }
 
-    void loadAdminData();
+    handleAdminDataLoad();
   }, [accessState]);
+
+  const pageLoading = accessState === "checking" || dataLoading;
 
   const totalVideos = useMemo(() => {
     return clients.reduce((sum, client) => sum + client.videoCount, 0);

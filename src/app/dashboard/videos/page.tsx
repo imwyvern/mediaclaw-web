@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -61,13 +61,15 @@ export default function VideosPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    const isInitialLoad = !hasLoadedRef.current;
 
     const run = async () => {
       setError(null);
-      if (loading) {
+      if (isInitialLoad) {
         setLoading(true);
       } else {
         setRefreshing(true);
@@ -92,6 +94,7 @@ export default function VideosPage() {
         }
       } finally {
         if (!cancelled) {
+          hasLoadedRef.current = true;
           setLoading(false);
           setRefreshing(false);
         }

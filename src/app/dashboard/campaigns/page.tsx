@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import {
   ArrowRight,
   Calendar,
@@ -216,8 +216,12 @@ export default function CampaignsPage() {
     setRefreshing(false);
   };
 
-  useEffect(() => {
+  const handleInitialLoad = useEffectEvent(() => {
     void loadCampaigns();
+  });
+
+  useEffect(() => {
+    handleInitialLoad();
   }, []);
 
   const openCampaignDetails = async (campaign: CampaignRecord) => {

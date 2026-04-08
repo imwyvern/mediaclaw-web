@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import {
   Check,
   Coins,
@@ -169,8 +169,12 @@ export default function SubscriptionPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
+  const handleInitialLoad = useEffectEvent(() => {
     void loadData();
+  });
+
+  useEffect(() => {
+    handleInitialLoad();
   }, []);
 
   const productMap = new Map(products.map((product) => [product.id, product]));

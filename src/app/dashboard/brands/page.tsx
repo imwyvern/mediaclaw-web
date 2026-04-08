@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import {
   Briefcase,
   Building2,
@@ -125,8 +125,12 @@ export default function BrandsPage() {
     }
   };
 
-  useEffect(() => {
+  const handleInitialLoad = useEffectEvent(() => {
     void loadBrands();
+  });
+
+  useEffect(() => {
+    handleInitialLoad();
   }, []);
 
   const resetCreateState = () => {
