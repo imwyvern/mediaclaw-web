@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 interface SettingsData {
@@ -206,7 +207,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-white/70">默认时区</label>
-                  <Select value={data.general.timezone} onValueChange={v => setData({...data, general: {...data.general, timezone: v}})}>
+                  <Select value={data.general.timezone} onValueChange={v => v && setData({...data, general: {...data.general, timezone: v}})}>
                     <SelectTrigger className="bg-white/5 border-white/10 text-white">
                       <SelectValue />
                     </SelectTrigger>
