@@ -241,11 +241,9 @@ export default function BrandAssetsPage() {
                         </div>
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 bg-[#0b0f1a]/80 backdrop-blur-md text-white border border-white/10 hover:bg-white/20">
+                            <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-[#0b0f1a]/80 backdrop-blur-md text-white border border-white/10 hover:bg-white/20 transition-colors focus-visible:outline-none">
                                 <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                              </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-[#0b0f1a] border-white/10 text-white">
                               <DropdownMenuItem className="hover:bg-white/10 cursor-pointer">
                                 <Eye className="w-4 h-4 mr-2" /> 预览

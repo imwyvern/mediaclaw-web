@@ -69,19 +69,19 @@ interface NavItem {
 }
 
 const navItems: readonly NavItem[] = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Content", href: "/dashboard/content", icon: Layers },
-  { name: "Videos", href: "/dashboard/videos", icon: Film },
+  { name: "概览", href: "/dashboard", icon: LayoutDashboard },
+  { name: "内容库", href: "/dashboard/content", icon: Layers },
+  { name: "视频管理", href: "/dashboard/videos", icon: Film },
   { name: "爆款发现", href: "/dashboard/discovery", icon: Flame },
-  { name: "Tasks", href: "/dashboard/videos/tasks", icon: ListTodo },
-  { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-  { name: "Brands", href: "/dashboard/brands", icon: Briefcase },
-  { name: "Campaigns", href: "/dashboard/campaigns", icon: Target },
-  { name: "Usage", href: "/dashboard/usage", icon: Activity },
-  { name: "Analytics", href: "/dashboard/analytics", icon: BarChart },
-  { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
+  { name: "创作任务", href: "/dashboard/videos/tasks", icon: ListTodo },
+  { name: "发布日历", href: "/dashboard/calendar", icon: Calendar },
+  { name: "品牌资产", href: "/dashboard/brands", icon: Briefcase },
+  { name: "营销活动", href: "/dashboard/campaigns", icon: Target },
+  { name: "用量统计", href: "/dashboard/usage", icon: Activity },
+  { name: "数据分析", href: "/dashboard/analytics", icon: BarChart },
+  { name: "账单", href: "/dashboard/billing", icon: CreditCard },
   { name: "Admin", href: "/dashboard/admin", icon: Shield, adminOnly: true, superAdminOnly: true },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  { name: "设置", href: "/dashboard/settings", icon: Settings },
 ] as const;
 
 const routeNameMap: Record<string, string> = {

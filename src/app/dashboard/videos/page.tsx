@@ -351,11 +351,9 @@ export default function VideoListPage() {
                     <td className="px-4 py-3 text-white/50">{new Date(video.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-white/10">
+                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none">
                             <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                          </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-[#0b0f1a] border-white/10 text-white">
                           <DropdownMenuItem onClick={() => handleRowClick(video.id)} className="hover:bg-white/10 cursor-pointer">
                             <Play className="w-4 h-4 mr-2 text-white/70" /> 查看详情
