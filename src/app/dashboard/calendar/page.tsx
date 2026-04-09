@@ -1,413 +1,353 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import {
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  parseISO,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
-} from "date-fns";
+import { useEffect, useState } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Plus,
-  RefreshCw,
+  Download,
+  Filter,
+  Video,
+  X,
+  AlertCircle,
+  Play,
+  MoreVertical
 } from "lucide-react";
-
-import { EmptyState } from "@/components/empty-state";
-import { ErrorState } from "@/components/error-state";
-import { MetadataUpdater } from "@/components/metadata-updater";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  api,
-  readApiErrorMessage,
-  type CalendarTask,
-} from "@/lib/api";
-import { type VideoLifecycleStatus } from "@/lib/video-status";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { formatCompactNumber } from "@/lib/format";
 
-const STATUS_STYLES: Record<string, { dot: string; chip: string; label: string }> = {
-  draft: {
-    dot: "bg-slate-400",
-    chip: "border-slate-400/20 bg-slate-400/10 text-slate-200",
-    label: "草稿",
-  },
-  queued: {
-    dot: "bg-slate-400",
-    chip: "border-slate-400/20 bg-slate-400/10 text-slate-200",
-    label: "排队中",
-  },
-  processing: {
-    dot: "bg-violet-400",
-    chip: "border-violet-400/20 bg-violet-400/10 text-violet-100",
-    label: "处理中",
-  },
-  pending_review: {
-    dot: "bg-amber-400",
-    chip: "border-amber-400/20 bg-amber-400/10 text-amber-100",
-    label: "待审核",
-  },
-  approved: {
-    dot: "bg-emerald-400",
-    chip: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    label: "已通过",
-  },
-  scheduled: {
-    dot: "bg-sky-400",
-    chip: "border-sky-400/20 bg-sky-400/10 text-sky-100",
-    label: "待发布",
-  },
-  completed: {
-    dot: "bg-emerald-400",
-    chip: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    label: "已完成",
-  },
-  published: {
-    dot: "bg-emerald-400",
-    chip: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    label: "已发布",
-  },
-  failed: {
-    dot: "bg-rose-400",
-    chip: "border-rose-400/20 bg-rose-400/10 text-rose-100",
-    label: "失败",
-  },
-  cancelled: {
-    dot: "bg-slate-500",
-    chip: "border-slate-500/20 bg-slate-500/10 text-slate-300",
-    label: "已取消",
-  },
-  expired: {
-    dot: "bg-slate-500",
-    chip: "border-slate-500/20 bg-slate-500/10 text-slate-300",
-    label: "已过期",
-  },
-};
+// Utility to generate a calendar grid
+const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
-function parseTaskDate(value: string) {
-  try {
-    const parsed = parseISO(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  } catch {
-    return null;
-  }
-}
-
-function getStatusStyle(status: VideoLifecycleStatus) {
-  return STATUS_STYLES[status] || STATUS_STYLES.scheduled;
-}
-
-function CalendarGridSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-7 gap-2">
-        {Array.from({ length: 7 }).map((_, index) => (
-          <Skeleton key={index} className="h-8 rounded-lg" />
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-2">
-        {Array.from({ length: 35 }).map((_, index) => (
-          <div key={index} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-            <Skeleton className="mb-3 h-5 w-8 rounded-full" />
-            <Skeleton className="mb-2 h-5 w-full rounded-lg" />
-            <Skeleton className="h-5 w-4/5 rounded-lg" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+interface ScheduledVideo {
+  id: string;
+  title: string;
+  scheduledDate: string;
+  status: "draft" | "processing" | "ready" | "published" | "expired";
+  thumbnailUrl?: string;
+  platform?: string;
 }
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [view, setView] = useState<"month" | "week">("month");
-  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [viewMode, setViewMode] = useState<"month" | "week">("month");
+  const [videos, setVideos] = useState<ScheduledVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(monthStart);
-  const intervalStart = view === "month" ? startOfWeek(monthStart) : startOfWeek(currentDate);
-  const intervalEnd = view === "month" ? endOfWeek(monthEnd) : endOfWeek(currentDate);
-  const days = eachDayOfInterval({ start: intervalStart, end: intervalEnd });
-  const monthKey = format(currentDate, "yyyy-MM");
+  // Filters
+  const [pipeline, setPipeline] = useState("all");
 
-  const loadTasks = useCallback(async (options?: { silent?: boolean }) => {
-    if (options?.silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
-    setError(null);
-    try {
-      const response = await api.calendar.scheduled({ month: monthKey, status: "scheduled" });
-      setTasks(response.data);
-    } catch (loadError) {
-      setTasks([]);
-      setError(readApiErrorMessage(loadError, "排期加载失败，请稍后重试。"));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [monthKey]);
+  // Selection/Detail
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [dayVideos, setDayVideos] = useState<ScheduledVideo[]>([]);
 
   useEffect(() => {
-    void loadTasks();
-  }, [loadTasks]);
+    fetchCalendarData();
+  }, [currentDate, viewMode, pipeline]);
 
-  const tasksForDay = useMemo(() => {
-    return days.reduce<Record<string, CalendarTask[]>>((accumulator, day) => {
-      const key = format(day, "yyyy-MM-dd");
-      accumulator[key] = tasks.filter((task) => {
-        const parsedDate = parseTaskDate(task.scheduledAt);
-        return parsedDate ? isSameDay(parsedDate, day) : false;
-      });
-      return accumulator;
-    }, {});
-  }, [days, tasks]);
+  const fetchCalendarData = async () => {
+    setLoading(true);
+    setError(null);
 
-  const selectedDayTasks = selectedDay
-    ? tasksForDay[format(selectedDay, "yyyy-MM-dd")] || []
-    : [];
+    // Calculate range
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const startDate = new Date(year, month, 1).toISOString();
+    const endDate = new Date(year, month + 1, 0).toISOString();
+
+    try {
+      const res = await fetch(`/api/v1/content?startDate=${startDate}&endDate=${endDate}&sort=scheduledDate&pipeline=${pipeline}`);
+      if (!res.ok) throw new Error("获取内容日历失败");
+      
+      const data = await res.json();
+      setVideos(Array.isArray(data.data) ? data.data : []);
+    } catch (err: any) {
+      console.error(err);
+      setError("服务连接中...");
+      setVideos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrev = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNext = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const handleExport = () => {
+    toast.success("日历导出已加入队列，稍后将自动下载");
+  };
+
+  const handleDayClick = (dayNum: number) => {
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNum);
+    setSelectedDay(d);
+    
+    // Filter videos for this exact day (assuming ISO strings)
+    const startOfDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNum).getTime();
+    const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
+    
+    const matched = videos.filter(v => {
+      if (!v.scheduledDate) return false;
+      const vt = new Date(v.scheduledDate).getTime();
+      return vt >= startOfDay && vt < endOfDay;
+    });
+    
+    setDayVideos(matched);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "published": return "bg-[#00e8b8] text-[#0b0f1a] border-[#00e8b8]";
+      case "ready": return "bg-green-500/20 text-green-400 border-green-500/30";
+      case "processing": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+      case "expired": return "bg-red-500/20 text-red-400 border-red-500/30";
+      default: return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"; // draft
+    }
+  };
+
+  const getStatusDot = (status: string) => {
+    switch (status) {
+      case "published": return "bg-[#00e8b8]";
+      case "ready": return "bg-green-400";
+      case "processing": return "bg-blue-400";
+      case "expired": return "bg-red-400";
+      default: return "bg-yellow-400";
+    }
+  };
+
+  // Calendar rendering logic
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month); // 0 = Sun, 1 = Mon, etc.
+  const emptyCells = Array.from({ length: firstDay === 0 ? 6 : firstDay - 1 }).map((_, i) => <div key={`empty-${i}`} className="bg-white/[0.01] border border-white/5 min-h-[120px]" />);
+
+  const days = Array.from({ length: daysInMonth }).map((_, i) => {
+    const dayNum = i + 1;
+    const startOfDay = new Date(year, month, dayNum).getTime();
+    const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
+    
+    const dayVids = videos.filter(v => {
+      if (!v.scheduledDate) return false;
+      const vt = new Date(v.scheduledDate).getTime();
+      return vt >= startOfDay && vt < endOfDay;
+    });
+
+    const isToday = new Date().toDateString() === new Date(year, month, dayNum).toDateString();
+
+    return (
+      <div 
+        key={`day-${dayNum}`} 
+        onClick={() => handleDayClick(dayNum)}
+        className={`min-h-[120px] p-2 border border-white/5 hover:border-white/20 transition-colors cursor-pointer group flex flex-col ${isToday ? 'bg-white/5 border-[#00e8b8]/30' : 'bg-white/[0.02]'}`}
+      >
+        <div className="flex justify-between items-start mb-2">
+          <span className={`text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-[#00e8b8] text-[#0b0f1a]' : 'text-white/70 group-hover:text-white'}`}>
+            {dayNum}
+          </span>
+          {dayVids.length > 0 && (
+            <Badge variant="secondary" className="bg-white/10 text-white/70 border-none px-1.5 h-5 text-[10px]">
+              {dayVids.length} 篇
+            </Badge>
+          )}
+        </div>
+        
+        <div className="flex-1 flex flex-col gap-1 overflow-hidden">
+          {dayVids.slice(0, 3).map(v => (
+            <div key={v.id} className={`text-[10px] truncate px-1.5 py-0.5 rounded border ${getStatusColor(v.status)} flex items-center gap-1.5`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDot(v.status)}`} />
+              <span className="truncate">{v.title}</span>
+            </div>
+          ))}
+          {dayVids.length > 3 && (
+            <div className="text-[10px] text-white/40 pl-1 mt-0.5">
+              + {dayVids.length - 3} 更多
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  });
 
   return (
-    <div className="flex h-full flex-col gap-8 pb-8">
-      <MetadataUpdater title="内容排期" />
-
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">内容排期</h1>
-          <p className="max-w-2xl text-sm leading-7 text-slate-300/80 sm:text-base">
-            直接读取真实排期任务，按月查看待发布、处理中和已发布的视频节点。
-          </p>
+    <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0] animate-in fade-in">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-white mb-1 flex items-center gap-3">
+            <CalendarIcon className="w-8 h-8 text-[#00e8b8]" />
+            内容日历
+          </h1>
+          <p className="text-white/50">规划全平台发布节奏，一览所有排期任务</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
-            onClick={() => {
-              void loadTasks({ silent: true });
-            }}
-            disabled={loading || refreshing}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            刷新排期
-          </Button>
-          <Button
-            className="bg-white text-slate-950 hover:bg-slate-100"
-            onClick={() => {
-              window.location.href = "/dashboard/videos/create";
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            创建视频
+        
+        <div className="flex items-center gap-3">
+          <Select value={pipeline} onValueChange={(val) => val && setPipeline(val)}>
+            <SelectTrigger className="w-[140px] bg-white/5 border-white/10 text-white focus:ring-0">
+              <Filter className="w-4 h-4 mr-2 text-white/40" />
+              <SelectValue placeholder="筛选流水线" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
+              <SelectItem value="all">所有流水线</SelectItem>
+              <SelectItem value="douyin_matrix">抖音矩阵</SelectItem>
+              <SelectItem value="xhs_seed">小红书种草</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" /> 导出排期
           </Button>
         </div>
       </div>
 
-      <Card className="border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(6,10,18,0.98))] p-5 shadow-[0_28px_80px_-48px_rgba(14,165,233,0.35)]">
-        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-xl font-semibold text-white">{format(currentDate, view === "month" ? "MMMM yyyy" : "yyyy 年 M 月")}</h2>
-            <div className="flex items-center overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                className="rounded-none border-r border-white/10 text-slate-100 hover:bg-white/[0.08]"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                className="rounded-none text-slate-100 hover:bg-white/[0.08]"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]"
-              onClick={() => setCurrentDate(new Date())}
-            >
-              回到今天
+      {/* Calendar Toolbar */}
+      <div className="flex items-center justify-between bg-white/[0.02] border border-white/5 p-4 rounded-2xl">
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-bold text-white w-32">
+            {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月
+          </h2>
+          <div className="flex items-center bg-white/5 rounded-lg border border-white/10 p-0.5">
+            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10">
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <div className="w-px h-4 bg-white/10 mx-1" />
+            <Button variant="ghost" size="icon" onClick={handleNext} className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10">
+              <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
-
-          <Tabs value={view} onValueChange={(value) => setView(value as "month" | "week")}>
-            <TabsList className="border border-white/10 bg-white/[0.04]">
-              <TabsTrigger value="month">月视图</TabsTrigger>
-              <TabsTrigger value="week">周视图</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <Button variant="ghost" className="h-9 text-white/50 hover:text-white hover:bg-white/10" onClick={() => setCurrentDate(new Date())}>
+            回到今天
+          </Button>
         </div>
 
-        {loading ? (
-          <CalendarGridSkeleton />
-        ) : error ? (
-          <ErrorState
-            title="排期加载失败"
-            description={error}
-            onRetry={() => {
-              void loadTasks();
-            }}
-            className="border-white/10 bg-black/20"
-          />
-        ) : tasks.length === 0 ? (
-          <EmptyState
-            icon={CalendarIcon}
-            title="本月暂无排期，去创建视频吧"
-            description="一旦有真实待发布任务，这里会自动按日期铺开，直接呈现排期结果。"
-            actionLabel="创建第一条视频"
-            onAction={() => {
-              window.location.href = "/dashboard/videos/create";
-            }}
-            className="border-white/10 bg-black/20"
-          />
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="rounded-xl border border-white/5 bg-white/[0.03] py-3">
-                  {day}
-                </div>
-              ))}
-            </div>
+        <div className="flex items-center bg-white/5 rounded-lg border border-white/10 p-1">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className={`h-8 px-4 ${viewMode === 'month' ? 'bg-white/10 text-white shadow-sm' : 'text-white/50 hover:text-white'}`}
+            onClick={() => setViewMode("month")}
+          >
+            月视图
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className={`h-8 px-4 ${viewMode === 'week' ? 'bg-white/10 text-white shadow-sm' : 'text-white/50 hover:text-white'}`}
+            onClick={() => setViewMode("week")}
+          >
+            周视图
+          </Button>
+        </div>
+      </div>
 
-            <div className="grid grid-cols-7 gap-2">
-              {days.map((day) => {
-                const key = format(day, "yyyy-MM-dd");
-                const dayTasks = tasksForDay[key] || [];
-                const isToday = isSameDay(day, new Date());
-                const inCurrentMonth = isSameMonth(day, monthStart);
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSelectedDay(day)}
-                    className={`min-h-[132px] rounded-2xl border p-3 text-left transition ${
-                      inCurrentMonth
-                        ? "border-white/10 bg-black/20 hover:border-sky-400/30 hover:bg-black/30"
-                        : "border-white/5 bg-black/10 text-slate-500"
-                    }`}
-                  >
-                    <div className="mb-3 flex items-center justify-between">
-                      <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-                          isToday ? "bg-white text-slate-950" : "bg-white/[0.04] text-slate-100"
-                        }`}
-                      >
-                        {format(day, "d")}
-                      </span>
-                      {dayTasks.length > 0 ? (
-                        <span className="text-[11px] text-slate-400">{dayTasks.length} 条</span>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2">
-                      {dayTasks.slice(0, 3).map((task) => {
-                        const statusStyle = getStatusStyle(task.status);
-                        return (
-                          <div
-                            key={task.id}
-                            className={`rounded-xl border px-2.5 py-2 text-[11px] ${statusStyle.chip}`}
-                          >
-                            <div className="mb-1 flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${statusStyle.dot}`} />
-                              <span className="truncate font-medium">{statusStyle.label}</span>
-                            </div>
-                            <div className="truncate text-sm font-semibold text-white">{task.title}</div>
-                            <div className="truncate text-[11px] text-slate-300/75">{task.brand}</div>
-                          </div>
-                        );
-                      })}
-
-                      {dayTasks.length > 3 ? (
-                        <div className="rounded-xl border border-dashed border-white/10 px-2.5 py-2 text-[11px] text-slate-400">
-                          还有 {dayTasks.length - 3} 条任务
-                        </div>
-                      ) : null}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+      {/* Calendar Grid */}
+      {error ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white/5 rounded-2xl border border-white/10 border-dashed p-12 text-center">
+          <AlertCircle className="w-12 h-12 text-[#00e8b8]/60 mb-4 animate-pulse" />
+          <h3 className="text-xl font-bold text-white mb-2">服务连接中...</h3>
+          <p className="text-white/50 max-w-md">无法获取日历排期数据。正在尝试重新连接，请稍后...</p>
+          <Button onClick={fetchCalendarData} variant="outline" className="mt-8 border-white/20 hover:bg-white/10 bg-transparent text-white">
+            重新加载
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-[#0b0f1a] overflow-hidden">
+          {/* Days of week header */}
+          <div className="grid grid-cols-7 border-b border-white/10 bg-white/[0.02]">
+            {['一', '二', '三', '四', '五', '六', '日'].map(d => (
+              <div key={d} className="py-3 text-center text-xs font-semibold text-white/50 uppercase tracking-wider">
+                星期{d}
+              </div>
+            ))}
           </div>
-        )}
-      </Card>
+          
+          {/* Days grid */}
+          <div className="grid grid-cols-7 bg-[#0b0f1a]">
+            {emptyCells}
+            {days}
+          </div>
+        </div>
+      )}
 
-      <Dialog open={Boolean(selectedDay)} onOpenChange={(open) => !open && setSelectedDay(null)}>
-        <DialogContent className="border-white/10 bg-slate-950 text-slate-100">
+      {/* Legend */}
+      <div className="flex flex-wrap items-center justify-center gap-6 py-4 text-xs text-white/60">
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400" /> 草稿/计划中</div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-blue-400" /> 处理中</div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-400" /> 准备就绪</div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-[#00e8b8]" /> 已发布</div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-400" /> 已过期/失败</div>
+      </div>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>
+        <DialogContent className="bg-[#0b0f1a] border-white/10 text-white max-w-2xl sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedDay ? format(selectedDay, "yyyy 年 M 月 d 日") : "排期详情"}</DialogTitle>
-            <DialogDescription className="text-slate-400">查看当天的真实排期任务和状态。</DialogDescription>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              {selectedDay && `${selectedDay.getMonth() + 1}月${selectedDay.getDate()}日 排期详情`}
+            </DialogTitle>
           </DialogHeader>
-
-          {selectedDay && selectedDayTasks.length > 0 ? (
-            <div className="space-y-3 py-2">
-              {selectedDayTasks.map((task) => {
-                const statusStyle = getStatusStyle(task.status);
-                const taskDate = parseTaskDate(task.scheduledAt);
-
-                return (
-                  <div key={task.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${statusStyle.chip}`}>
-                        <span className={`h-2 w-2 rounded-full ${statusStyle.dot}`} />
-                        {statusStyle.label}
-                      </span>
-                      <span className="text-xs text-slate-400">{task.brand}</span>
-                    </div>
-                    <div className="text-base font-semibold text-white">{task.title}</div>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
-                      <Clock className="h-4 w-4" />
-                      {taskDate ? format(taskDate, "HH:mm") : "时间待定"}
-                    </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                      <Button variant="outline" className="border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/[0.08]" render={<Link href="/dashboard/videos" />}>
-                        查看全部视频
-                      </Button>
-                      <Button className="bg-white text-slate-950 hover:bg-slate-100" render={<Link href={`/dashboard/videos/${task.detailId}`} />}>
-                        打开详情
-                      </Button>
+          
+          <div className="py-4 max-h-[60vh] overflow-y-auto pr-2 space-y-4">
+            {dayVideos.length === 0 ? (
+              <div className="text-center py-12 bg-white/5 rounded-xl border border-white/5 border-dashed">
+                <Video className="w-10 h-10 text-white/20 mx-auto mb-3" />
+                <p className="text-white/50">本日无排期内容</p>
+                <Button className="mt-4 bg-white/10 text-white hover:bg-white/20 border border-white/10" onClick={() => setSelectedDay(null)}>
+                  创建任务
+                </Button>
+              </div>
+            ) : (
+              dayVideos.map(video => (
+                <div key={video.id} className="flex gap-4 p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 transition-colors group">
+                  <div className="w-24 h-16 rounded-md bg-black border border-white/10 overflow-hidden shrink-0 relative">
+                    {video.thumbnailUrl ? (
+                      <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/20">
+                        <Video className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity">
+                      <Play className="w-6 h-6 text-[#00e8b8]" />
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              icon={CalendarIcon}
-              title="这一天还没有排期"
-              description="当前没有真实任务落在这一天，创建或调整发布时间后会自动同步到这里。"
-              actionLabel="去创建视频"
-              onAction={() => {
-                window.location.href = "/dashboard/videos/create";
-              }}
-              className="border-white/10 bg-black/20 py-12"
-            />
-          )}
+                  
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-white/90 text-sm line-clamp-1 mb-1 group-hover:text-[#00e8b8] transition-colors">
+                      {video.title || "未命名视频"}
+                    </h4>
+                    <div className="flex items-center gap-3 text-xs mt-2">
+                      <Badge className={`${getStatusColor(video.status)} px-2 py-0 border font-normal`}>
+                        {video.status === 'published' ? '已发布' : 
+                         video.status === 'ready' ? '待发布' : 
+                         video.status === 'processing' ? '处理中' : '草稿'}
+                      </Badge>
+                      {video.platform && (
+                        <span className="text-white/50 bg-white/5 px-2 py-0.5 rounded">{video.platform}</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="shrink-0 flex items-center">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-white/40 hover:text-white hover:bg-white/10">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

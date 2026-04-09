@@ -24,6 +24,7 @@ import {
   Shield,
   Target,
   Video,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -64,42 +65,36 @@ interface NavItem {
   name: string;
   href: string;
   icon: LucideIcon;
+  group: "内容" | "数据" | "管理";
   adminOnly?: boolean;
   superAdminOnly?: boolean;
 }
 
 const navItems: readonly NavItem[] = [
-  { name: "概览", href: "/dashboard", icon: LayoutDashboard },
-  { name: "内容库", href: "/dashboard/content", icon: Layers },
-  { name: "视频管理", href: "/dashboard/videos", icon: Film },
-  { name: "爆款发现", href: "/dashboard/discovery", icon: Flame },
-  { name: "创作任务", href: "/dashboard/videos/tasks", icon: ListTodo },
-  { name: "发布日历", href: "/dashboard/calendar", icon: Calendar },
-  { name: "品牌资产", href: "/dashboard/brands", icon: Briefcase },
-  { name: "营销活动", href: "/dashboard/campaigns", icon: Target },
-  { name: "用量统计", href: "/dashboard/usage", icon: Activity },
-  { name: "数据分析", href: "/dashboard/analytics", icon: BarChart },
-  { name: "账单", href: "/dashboard/billing", icon: CreditCard },
-  { name: "Admin", href: "/dashboard/admin", icon: Shield, adminOnly: true, superAdminOnly: true },
-  { name: "设置", href: "/dashboard/settings", icon: Settings },
+  { name: "总览", href: "/dashboard", icon: LayoutDashboard, group: "内容" },
+  { name: "视频", href: "/dashboard/videos", icon: Film, group: "内容" },
+  { name: "爆款发现", href: "/dashboard/discovery", icon: Flame, group: "内容" },
+  { name: "品牌资产", href: "/dashboard/brands", icon: Briefcase, group: "内容" },
+  
+  { name: "内容日历", href: "/dashboard/calendar", icon: Calendar, group: "数据" },
+  { name: "数据分析", href: "/dashboard/analytics", icon: BarChart, group: "数据" },
+  
+  { name: "活动管理", href: "/dashboard/campaigns", icon: Target, group: "管理" },
+  { name: "团队管理", href: "/dashboard/team", icon: Users, group: "管理" },
+  { name: "设置", href: "/dashboard/settings", icon: Settings, group: "管理" },
 ] as const;
 
 const routeNameMap: Record<string, string> = {
-  dashboard: "Overview",
-  content: "Content",
-  videos: "Videos",
+  dashboard: "总览",
+  videos: "视频",
   discovery: "爆款发现",
-  tasks: "Tasks",
-  calendar: "Calendar",
-  brands: "Brands",
-  campaigns: "Campaigns",
-  usage: "Usage",
-  analytics: "Analytics",
-  billing: "Billing",
+  calendar: "内容日历",
+  brands: "品牌资产",
+  campaigns: "活动管理",
+  analytics: "数据分析",
+  team: "团队管理",
+  settings: "设置",
   admin: "Admin",
-  settings: "Settings",
-  onboarding: "Onboarding",
-  subscription: "Subscription",
   create: "Create",
 };
 
@@ -150,27 +145,36 @@ function SidebarContent({
         </Link>
       </div>
       <ScrollArea className="flex-1 px-4">
-        <nav className="space-y-1">
-          {visibleNavItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            const Icon = item.icon;
-
+        <nav className="space-y-6">
+          {(["内容", "数据", "管理"] as const).map((groupName) => {
+            const groupItems = visibleNavItems.filter((item) => item.group === groupName);
+            if (groupItems.length === 0) return null;
             return (
-              <Link key={item.name} href={item.href} onClick={onItemClick}>
-                <span
-                  className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <Icon
-                    size={18}
-                    className={isActive ? "text-primary-foreground" : "transition-transform group-hover:scale-110"}
-                  />
-                  {item.name}
-                </span>
-              </Link>
+              <div key={groupName} className="space-y-1">
+                <h4 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{groupName}</h4>
+                {groupItems.map((item) => {
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  const Icon = item.icon;
+
+                  return (
+                    <Link key={item.name} href={item.href} onClick={onItemClick}>
+                      <span
+                        className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        <Icon
+                          size={18}
+                          className={isActive ? "text-primary-foreground" : "transition-transform group-hover:scale-110"}
+                        />
+                        {item.name}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
