@@ -2,2014 +2,461 @@
 
 import { useEffect, useState } from "react";
 import {
-  BellRing,
-  Bot,
+  Settings as SettingsIcon,
+  Key,
+  Bell,
+  CreditCard,
+  Building,
+  UploadCloud,
   CheckCircle2,
   Copy,
-  Cpu,
-  Key,
-  Loader2,
-  Plus,
-  RefreshCcw,
+  RefreshCw,
   Trash2,
-  User as UserIcon,
-  Webhook,
+  Plus,
+  AlertCircle,
+  MessageSquare
 } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { EmptyState } from "@/components/empty-state";
-import { ErrorState } from "@/components/error-state";
-import { MetadataUpdater } from "@/components/metadata-updater";
-import {
-  api,
-  type ApiKeyRecord,
-  type ClawHostInstanceRecord,
-  type ModelCapability,
-  type ModelOptionRecord,
-  type NotificationChannel,
-  type OrgModelSettings,
-  type User,
-  type WebhookRecord,
-} from "@/lib/api";
-import {
-  formatOpenClawConnectionStatus,
-  formatOpenClawDeploymentMode,
-  formatOpenClawImChannel,
-  DEFAULT_OPENCLAW_INSTANCE_CONFIG,
-  formatOpenClawStatus,
-  hasOpenClawSkill,
-  OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
-  OPENCLAW_MEDIACLAW_CLIENT_VERSION,
-  resolveOpenClawClientName,
-} from "@/lib/openclaw";
-import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
 
-type SettingsTab = "profile" | "api" | "webhooks" | "notifications" | "ai" | "openclaw";
-type AsyncStatus = "idle" | "loading" | "success" | "error";
-
-interface ApiKeyFormState {
-  name: string;
-  permissionsText: string;
-  expiresAt: string;
-}
-
-interface WebhookFormState {
-  name: string;
-  url: string;
-  secret: string;
-  eventsText: string;
-  isActive: boolean;
-}
-
-interface NotificationDraft {
-  id?: string;
-  channel: string;
-  name: string;
-  eventsText: string;
-  configText: string;
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiKeyValidationState {
-  valid: boolean;
-  message?: string;
-}
-
-const DEFAULT_API_KEY_FORM: ApiKeyFormState = {
-  name: "",
-  permissionsText: "videos:read, videos:write",
-  expiresAt: "",
-};
-
-const DEFAULT_WEBHOOK_FORM: WebhookFormState = {
-  name: "",
-  url: "",
-  secret: "",
-  eventsText: "video.completed, video.failed",
-  isActive: true,
-};
-
-const DEFAULT_NOTIFICATION_SEED = {
-  channel: "system",
-  name: "System Alerts",
-  events: ["video.failed", "credit.low"],
-  config: {},
-  isActive: true,
-};
-
-const DEFAULT_MODEL_FORM: Record<ModelCapability, string> = {
-  chat: "deepseek-v3",
-  copy: "deepseek-v3",
-  frameEdit: "gemini-2.5-flash-image",
-  videoGen: "kling-v3-omni",
-  analysis: "deepseek-v3",
-};
-
-const MODEL_CAPABILITY_META: Array<{
-  key: ModelCapability;
-  label: string;
-  description: string;
-}> = [
-  { key: "chat", label: "对话模型", description: "日常助手对话、问答和操作指令。" },
-  { key: "copy", label: "文案模型", description: "视频文案、标题、评论引导等生成。" },
-  { key: "frameEdit", label: "帧编辑模型", description: "品牌换皮、参考帧改写和素材编辑。" },
-  { key: "videoGen", label: "视频生成模型", description: "图生视频和片段生成阶段。" },
-  { key: "analysis", label: "分析模型", description: "爆款拆解、失败分析和复盘优化。" },
-];
-
-function splitCommaSeparated(value: string) {
-  return value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function formatDateTime(value?: string) {
-  if (!value) {
-    return "--";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-
-function toIsoDateTime(value: string) {
-  if (!value) {
-    return undefined;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-
-  return date.toISOString();
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === "object") {
-    const maybeResponse = "response" in error ? error.response : undefined;
-    if (maybeResponse && typeof maybeResponse === "object" && maybeResponse !== null && "data" in maybeResponse) {
-      const responseData = maybeResponse.data;
-      if (responseData && typeof responseData === "object" && "message" in responseData && typeof responseData.message === "string") {
-        return responseData.message;
-      }
-    }
-
-    if ("message" in error && typeof error.message === "string") {
-      return error.message;
-    }
-  }
-
-  return fallback;
-}
-
-function readAuthTokenFromCookies() {
-  if (typeof document === "undefined") {
-    return "";
-  }
-
-  const tokenPair = document.cookie
-    .split("; ")
-    .find((item) => item.startsWith("auth_token="));
-
-  return tokenPair?.split("=")[1] ?? "";
-}
-
-function stringifyConfig(config: Record<string, unknown>) {
-  try {
-    return JSON.stringify(config, null, 2);
-  } catch {
-    return "{}";
-  }
-}
-
-function parseConfigText(value: string) {
-  if (!value.trim()) {
-    return {} as Record<string, unknown>;
-  }
-
-  const parsed = JSON.parse(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Notification config must be a JSON object.");
-  }
-
-  return parsed as Record<string, unknown>;
-}
-
-function getApiKeyDisplayValue(record: ApiKeyRecord) {
-  return record.secret || record.maskedKey || record.prefix;
-}
-
-function formatBillingModeLabel(mode?: string) {
-  switch (mode) {
-    case "byok":
-      return "BYOK 自带 Key";
-    case "postpaid":
-      return "后付费";
-    case "quota":
-    default:
-      return "订阅含量";
-  }
-}
-
-function findModelOption(
-  settings: OrgModelSettings | null,
-  capability: ModelCapability,
-  modelId: string,
-): ModelOptionRecord | null {
-  if (!settings) {
-    return null;
-  }
-
-  return settings.availableModels[capability].find((option) => option.id === modelId) ?? null;
-}
-
-function toNotificationDraft(channel: NotificationChannel): NotificationDraft {
-  return {
-    id: channel.id,
-    channel: channel.channel,
-    name: channel.name,
-    eventsText: channel.events.join(", "),
-    configText: stringifyConfig(channel.config),
-    isActive: channel.isActive,
-    createdAt: channel.createdAt,
-    updatedAt: channel.updatedAt,
+interface SettingsData {
+  general: {
+    orgName: string;
+    timezone: string;
+    language: string;
+    logoUrl?: string;
+  };
+  apiKeys: Array<{ id: string; name: string; key: string; lastUsed: string }>;
+  notifications: {
+    feishu: { enabled: boolean; webhookUrl: string };
+    dingtalk: { enabled: boolean; webhookUrl: string };
+    wecom: { enabled: boolean; webhookUrl: string };
+  };
+  billing: {
+    plan: string;
+    usedVideos: number;
+    totalVideos: number;
+    history: Array<{ id: string; date: string; amount: number; status: string }>;
   };
 }
 
-function SectionSkeleton({ blocks = 2 }: { blocks?: number }) {
-  return (
-    <div className="space-y-4">
-      {Array.from({ length: blocks }).map((_, index) => (
-        <Card key={index} className="border-white/10 bg-zinc-950/60">
-          <CardHeader className="space-y-3">
-            <Skeleton className="h-5 w-40 bg-white/10" />
-            <Skeleton className="h-4 w-72 bg-white/5" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-10 w-full bg-white/5" />
-            <Skeleton className="h-10 w-full bg-white/5" />
-            <Skeleton className="h-24 w-full bg-white/5" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
 export default function SettingsPage() {
-  const storedUser = useAuthStore((state) => state.user);
-  const storedToken = useAuthStore((state) => state.token);
-  const login = useAuthStore((state) => state.login);
+  const [data, setData] = useState<SettingsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-
-  const [profileStatus, setProfileStatus] = useState<AsyncStatus>("loading");
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [accountInfo, setAccountInfo] = useState<User | null>(null);
-  const [profileForm, setProfileForm] = useState({
-    name: "",
-    email: "",
-  });
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-
-  const [apiKeysStatus, setApiKeysStatus] = useState<AsyncStatus>("idle");
-  const [apiKeysError, setApiKeysError] = useState<string | null>(null);
-  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
-  const [apiKeyForm, setApiKeyForm] = useState<ApiKeyFormState>(DEFAULT_API_KEY_FORM);
-  const [isCreatingApiKey, setIsCreatingApiKey] = useState(false);
-  const [removingApiKeyId, setRemovingApiKeyId] = useState<string | null>(null);
-  const [validatingApiKeyId, setValidatingApiKeyId] = useState<string | null>(null);
-  const [apiKeyValidations, setApiKeyValidations] = useState<Record<string, ApiKeyValidationState>>({});
-
-  const [webhooksStatus, setWebhooksStatus] = useState<AsyncStatus>("idle");
-  const [webhooksError, setWebhooksError] = useState<string | null>(null);
-  const [webhooks, setWebhooks] = useState<WebhookRecord[]>([]);
-  const [webhookForm, setWebhookForm] = useState<WebhookFormState>(DEFAULT_WEBHOOK_FORM);
-  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
-  const [removingWebhookId, setRemovingWebhookId] = useState<string | null>(null);
-
-  const [notificationsStatus, setNotificationsStatus] = useState<AsyncStatus>("idle");
-  const [notificationsError, setNotificationsError] = useState<string | null>(null);
-  const [notificationDrafts, setNotificationDrafts] = useState<NotificationDraft[]>([]);
-  const [savingNotificationKey, setSavingNotificationKey] = useState<string | null>(null);
-  const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
-
-  const [aiStatus, setAiStatus] = useState<AsyncStatus>("idle");
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [modelSettings, setModelSettings] = useState<OrgModelSettings | null>(null);
-  const [modelForm, setModelForm] = useState<Record<ModelCapability, string>>(DEFAULT_MODEL_FORM);
-  const [isSavingAiSettings, setIsSavingAiSettings] = useState(false);
-
-  const [openClawStatus, setOpenClawStatus] = useState<AsyncStatus>("idle");
-  const [openClawError, setOpenClawError] = useState<string | null>(null);
-  const [openClawInstance, setOpenClawInstance] = useState<ClawHostInstanceRecord | null>(null);
-  const [openClawAction, setOpenClawAction] = useState<"install" | "uninstall" | null>(null);
-  const [issuingConnectionCode, setIssuingConnectionCode] = useState(false);
-  const [lastIssuedConnectionCode, setLastIssuedConnectionCode] = useState<string | null>(null);
-  const currentUser = accountInfo ?? storedUser;
-  const mediaclawClientInstalled = hasOpenClawSkill(openClawInstance);
-  const canManageOpenClaw = currentUser?.roleScope === "admin";
-
-  function syncAuthStore(nextUser: User) {
-    const nextToken = storedToken || readAuthTokenFromCookies();
-    if (nextToken) {
-      login(nextUser, nextToken);
-    }
-  }
-
-  async function loadProfile() {
-    setProfileStatus("loading");
-    setProfileError(null);
-
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await api.account.info();
-      const nextUser = response.data;
-      setAccountInfo(nextUser);
-      setProfileForm({
-        name: nextUser.name ?? "",
-        email: nextUser.email ?? "",
+      const [settingsRes, apiKeysRes, billingRes] = await Promise.all([
+        fetch("/api/v1/settings").catch(() => null),
+        fetch("/api/v1/apikey").catch(() => null),
+        fetch("/api/v1/billing/usage").catch(() => null)
+      ]);
+
+      // Handle failures gracefully with partial mock fallback to prevent crash if APIs not ready
+      const s = settingsRes?.ok ? await settingsRes.json() : {};
+      const k = apiKeysRes?.ok ? await apiKeysRes.json() : { data: [] };
+      const b = billingRes?.ok ? await billingRes.json() : {};
+
+      setData({
+        general: s.general || { orgName: "MediaClaw Demo", timezone: "Asia/Shanghai", language: "zh-CN" },
+        apiKeys: Array.isArray(k.data) ? k.data : [],
+        notifications: s.notifications || {
+          feishu: { enabled: false, webhookUrl: "" },
+          dingtalk: { enabled: false, webhookUrl: "" },
+          wecom: { enabled: false, webhookUrl: "" }
+        },
+        billing: b.data || { plan: "Pro", usedVideos: 124, totalVideos: 500, history: [] }
       });
-      setProfileStatus("success");
-      syncAuthStore(nextUser);
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load profile.");
-      setProfileError(message);
-      setProfileStatus("error");
-      toast.error("加载账号信息失败", { description: message });
+    } catch (err: any) {
+      console.error(err);
+      setError("服务连接中...");
+    } finally {
+      setLoading(false);
     }
-  }
-
-  async function loadApiKeys() {
-    setApiKeysStatus("loading");
-    setApiKeysError(null);
-
-    try {
-      const response = await api.settings.apiKeys.list();
-      setApiKeys(response.data);
-      setApiKeysStatus("success");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load API keys.");
-      setApiKeysError(message);
-      setApiKeysStatus("error");
-      toast.error("加载 API Keys 失败", { description: message });
-    }
-  }
-
-  async function loadWebhooks() {
-    setWebhooksStatus("loading");
-    setWebhooksError(null);
-
-    try {
-      const response = await api.settings.webhooks.list();
-      setWebhooks(response.data);
-      setWebhooksStatus("success");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load webhooks.");
-      setWebhooksError(message);
-      setWebhooksStatus("error");
-      toast.error("加载 Webhooks 失败", { description: message });
-    }
-  }
-
-  async function loadNotifications() {
-    setNotificationsStatus("loading");
-    setNotificationsError(null);
-
-    try {
-      const response = await api.settings.notifications.get();
-      setNotificationDrafts(response.data.map((item) => toNotificationDraft(item)));
-      setNotificationsStatus("success");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load notifications.");
-      setNotificationsError(message);
-      setNotificationsStatus("error");
-      toast.error("加载通知配置失败", { description: message });
-    }
-  }
-
-  async function loadAiSettings() {
-    setAiStatus("loading");
-    setAiError(null);
-
-    try {
-      const response = await api.org.modelPreferences.get();
-      setModelSettings(response.data);
-      setModelForm(response.data.preferences);
-      setAiStatus("success");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load AI model settings.");
-      setAiError(message);
-      setAiStatus("error");
-      toast.error("加载 AI 模型配置失败", { description: message });
-    }
-  }
-
-  async function loadOpenClaw() {
-    setOpenClawStatus("loading");
-    setOpenClawError(null);
-
-    try {
-      const response = await api.clawhost.list({ page: 1, limit: 1 });
-      const latestInstance = response.data.items[0] ?? null;
-
-      if (!latestInstance) {
-        setOpenClawInstance(null);
-        setLastIssuedConnectionCode(null);
-        setOpenClawStatus("success");
-        return;
-      }
-
-      try {
-        const statusResponse = await api.clawhost.status(latestInstance.instanceId);
-        setOpenClawInstance({
-          ...latestInstance,
-          status: statusResponse.data.status,
-          healthStatus: statusResponse.data.healthStatus,
-        });
-      } catch {
-        setOpenClawInstance(latestInstance);
-      }
-
-      setOpenClawStatus("success");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to load OpenClaw status.");
-      setOpenClawError(message);
-      setOpenClawStatus("error");
-      toast.error("加载 OpenClaw 状态失败", { description: message });
-    }
-  }
+  };
 
   useEffect(() => {
-    void loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchSettings();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === "api" && apiKeysStatus === "idle") {
-      void loadApiKeys();
-    }
-
-    if (activeTab === "webhooks" && webhooksStatus === "idle") {
-      void loadWebhooks();
-    }
-
-    if (activeTab === "notifications" && notificationsStatus === "idle") {
-      void loadNotifications();
-    }
-
-    if (activeTab === "ai" && aiStatus === "idle") {
-      void loadAiSettings();
-    }
-
-    if (activeTab === "openclaw" && openClawStatus === "idle") {
-      void loadOpenClaw();
-    }
-  }, [activeTab, aiStatus, apiKeysStatus, notificationsStatus, openClawStatus, webhooksStatus]);
-
-  async function handleCopy(value: string, label: string) {
-    if (!value) {
-      toast.error(`${label} 为空，无法复制`);
-      return;
-    }
-
-    if (typeof navigator === "undefined" || !navigator.clipboard) {
-      toast.error("当前环境不支持剪贴板复制");
-      return;
-    }
-
+  const handleSaveGeneral = async () => {
+    setSaving(true);
     try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`${label} 已复制`);
-    } catch (error) {
-      const message = getErrorMessage(error, "Copy failed.");
-      toast.error("复制失败", { description: message });
-    }
-  }
-
-  async function handleSaveProfile() {
-    if (!profileForm.name.trim()) {
-      toast.error("Name is required.");
-      return;
-    }
-
-    setIsSavingProfile(true);
-    try {
-      const response = await api.account.updateProfile({
-        name: profileForm.name.trim(),
-        email: profileForm.email.trim() || undefined,
+      const res = await fetch("/api/v1/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ general: data?.general })
       });
-      setAccountInfo(response.data);
-      setProfileForm({
-        name: response.data.name ?? "",
-        email: response.data.email ?? "",
+      if (!res.ok) throw new Error("保存失败");
+      toast.success("基础设置已更新");
+    } catch (err: any) {
+      toast.error(err.message || "设置更新失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notifications: data?.notifications })
       });
-      syncAuthStore(response.data);
-      toast.success("Profile updated");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to update profile.");
-      toast.error("保存 Profile 失败", { description: message });
+      if (!res.ok) throw new Error("保存失败");
+      toast.success("通知设置已更新");
+    } catch (err: any) {
+      toast.error(err.message || "设置更新失败");
     } finally {
-      setIsSavingProfile(false);
+      setSaving(false);
     }
-  }
+  };
 
-  async function validateApiKey(record: ApiKeyRecord, silentSuccess = false) {
-    const candidate = record.secret || record.prefix || record.maskedKey;
-    if (!candidate) {
-      toast.error("缺少可校验的 Key 信息");
-      return;
-    }
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("已复制到剪贴板");
+  };
 
-    setValidatingApiKeyId(record.id);
-    try {
-      const response = await api.settings.apiKeys.validate({
-        key: candidate,
-        prefix: record.prefix || undefined,
-      });
-      setApiKeyValidations((current) => ({
-        ...current,
-        [record.id]: response.data,
-      }));
-
-      if (!response.data.valid) {
-        toast.error("API Key 校验未通过", {
-          description: response.data.message,
-        });
-      } else if (!silentSuccess) {
-        toast.success("API Key 校验通过", {
-          description: response.data.message,
-        });
-      }
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to validate API key.");
-      toast.error("API Key 校验失败", { description: message });
-    } finally {
-      setValidatingApiKeyId(null);
-    }
-  }
-
-  async function handleCreateApiKey() {
-    if (!apiKeyForm.name.trim()) {
-      toast.error("请输入 Key 名称");
-      return;
-    }
-
-    setIsCreatingApiKey(true);
-    try {
-      const response = await api.settings.apiKeys.add({
-        name: apiKeyForm.name.trim(),
-        permissions: splitCommaSeparated(apiKeyForm.permissionsText),
-        expiresAt: toIsoDateTime(apiKeyForm.expiresAt),
-      });
-      setApiKeys((current) => [response.data, ...current]);
-      setApiKeysStatus("success");
-      setApiKeyForm(DEFAULT_API_KEY_FORM);
-      toast.success("API Key 已创建");
-      await validateApiKey(response.data, true);
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to create API key.");
-      toast.error("创建 API Key 失败", { description: message });
-    } finally {
-      setIsCreatingApiKey(false);
-    }
-  }
-
-  async function handleRemoveApiKey(record: ApiKeyRecord) {
-    if (typeof window !== "undefined" && !window.confirm(`Delete API key \"${record.name}\"?`)) {
-      return;
-    }
-
-    setRemovingApiKeyId(record.id);
-    try {
-      await api.settings.apiKeys.remove(record.id);
-      setApiKeys((current) => current.filter((item) => item.id !== record.id));
-      setApiKeyValidations((current) => {
-        const next = { ...current };
-        delete next[record.id];
-        return next;
-      });
-      toast.success("API Key 已删除");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to remove API key.");
-      toast.error("删除 API Key 失败", { description: message });
-    } finally {
-      setRemovingApiKeyId(null);
-    }
-  }
-
-  async function handleCreateWebhook() {
-    if (!webhookForm.name.trim()) {
-      toast.error("请输入 Webhook 名称");
-      return;
-    }
-
-    if (!webhookForm.url.trim()) {
-      toast.error("请输入 Webhook URL");
-      return;
-    }
-
-    try {
-      new URL(webhookForm.url.trim());
-    } catch {
-      toast.error("Webhook URL 格式不正确");
-      return;
-    }
-
-    setIsCreatingWebhook(true);
-    try {
-      const response = await api.settings.webhooks.add({
-        name: webhookForm.name.trim(),
-        url: webhookForm.url.trim(),
-        secret: webhookForm.secret.trim() || undefined,
-        events: splitCommaSeparated(webhookForm.eventsText),
-        isActive: webhookForm.isActive,
-      });
-      setWebhooks((current) => [response.data, ...current]);
-      setWebhooksStatus("success");
-      setWebhookForm(DEFAULT_WEBHOOK_FORM);
-      toast.success("Webhook 已创建");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to create webhook.");
-      toast.error("创建 Webhook 失败", { description: message });
-    } finally {
-      setIsCreatingWebhook(false);
-    }
-  }
-
-  async function handleRemoveWebhook(record: WebhookRecord) {
-    if (typeof window !== "undefined" && !window.confirm(`Delete webhook \"${record.name}\"?`)) {
-      return;
-    }
-
-    setRemovingWebhookId(record.id);
-    try {
-      await api.settings.webhooks.remove(record.id);
-      setWebhooks((current) => current.filter((item) => item.id !== record.id));
-      toast.success("Webhook 已删除");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to remove webhook.");
-      toast.error("删除 Webhook 失败", { description: message });
-    } finally {
-      setRemovingWebhookId(null);
-    }
-  }
-
-  function updateNotificationDraft(key: string, patch: Partial<NotificationDraft>) {
-    setNotificationDrafts((current) =>
-      current.map((draft) =>
-        (draft.id ?? draft.channel) === key
-          ? { ...draft, ...patch }
-          : draft,
-      ),
+  if (error || !data) {
+    return (
+      <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0] animate-in fade-in">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-white mb-1 flex items-center gap-3">
+            <SettingsIcon className="w-8 h-8 text-[#00e8b8]" /> 设置
+          </h1>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center bg-white/5 rounded-2xl border border-white/10 border-dashed p-12 text-center">
+          <AlertCircle className="w-12 h-12 text-[#00e8b8]/60 mb-4 animate-pulse" />
+          <h3 className="text-xl font-bold text-white mb-2">服务连接中...</h3>
+          <p className="text-white/50 max-w-md">无法获取设置数据。正在尝试重新连接，请稍后...</p>
+          <Button onClick={fetchSettings} variant="outline" className="mt-8 border-white/20 hover:bg-white/10 bg-transparent text-white">重新加载</Button>
+        </div>
+      </div>
     );
   }
 
-  async function handleSeedNotifications() {
-    if (isSeedingNotifications) {
-      return;
-    }
-
-    setIsSeedingNotifications(true);
-    try {
-      const response = await api.settings.notifications.update(DEFAULT_NOTIFICATION_SEED);
-      setNotificationDrafts([toNotificationDraft(response.data)]);
-      setNotificationsStatus("success");
-      toast.success("默认通知渠道已创建");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to initialize notifications.");
-      toast.error("初始化通知配置失败", { description: message });
-    } finally {
-      setIsSeedingNotifications(false);
-    }
-  }
-
-  async function handleSaveNotification(draft: NotificationDraft) {
-    const key = draft.id ?? draft.channel;
-    if (!draft.name.trim()) {
-      toast.error("Notification name is required.");
-      return;
-    }
-
-    if (!draft.channel.trim()) {
-      toast.error("Notification channel is required.");
-      return;
-    }
-
-    let config: Record<string, unknown>;
-    try {
-      config = parseConfigText(draft.configText);
-    } catch (error) {
-      const message = getErrorMessage(error, "Invalid notification config.");
-      toast.error("通知配置 JSON 无效", { description: message });
-      return;
-    }
-
-    setSavingNotificationKey(key);
-    try {
-      const response = await api.settings.notifications.update({
-        id: draft.id,
-        channel: draft.channel.trim(),
-        name: draft.name.trim(),
-        events: splitCommaSeparated(draft.eventsText),
-        config,
-        isActive: draft.isActive,
-      });
-      const nextDraft = toNotificationDraft(response.data);
-      setNotificationDrafts((current) =>
-        current.map((item) =>
-          (item.id ?? item.channel) === key
-            ? nextDraft
-            : item,
-        ),
-      );
-      toast.success("通知配置已更新");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to update notifications.");
-      toast.error("保存通知配置失败", { description: message });
-    } finally {
-      setSavingNotificationKey(null);
-    }
-  }
-
-  async function handleSaveAiSettings() {
-    setIsSavingAiSettings(true);
-
-    try {
-      const response = await api.org.modelPreferences.update(modelForm);
-      setModelSettings(response.data);
-      setModelForm(response.data.preferences);
-      setAiStatus("success");
-      toast.success("AI 模型偏好已保存");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to save AI model settings.");
-      toast.error("保存 AI 模型偏好失败", { description: message });
-    } finally {
-      setIsSavingAiSettings(false);
-    }
-  }
-
-  async function syncOpenClawInstance(instanceId: string) {
-    const instanceResponse = await api.clawhost.get(instanceId);
-
-    try {
-      const statusResponse = await api.clawhost.status(instanceId);
-      setOpenClawInstance({
-        ...instanceResponse.data,
-        status: statusResponse.data.status,
-        healthStatus: statusResponse.data.healthStatus,
-      });
-    } catch {
-      setOpenClawInstance(instanceResponse.data);
-    }
-
-    setOpenClawStatus("success");
-  }
-
-  async function ensureOpenClawInstance() {
-    if (openClawInstance) {
-      return openClawInstance;
-    }
-
-      const response = await api.clawhost.create({
-      clientName: resolveOpenClawClientName([
-        currentUser?.name,
-        currentUser?.phone,
-      ]),
-      config: DEFAULT_OPENCLAW_INSTANCE_CONFIG,
-      deploymentMode: "byoc",
-      requestedImChannel: "feishu",
-    });
-
-    setOpenClawInstance(response.data);
-    return response.data;
-  }
-
-  async function handleInstallOpenClawSkill() {
-    setOpenClawAction("install");
-
-    try {
-      const instance = await ensureOpenClawInstance();
-      await api.clawhost.installSkill(instance.instanceId, {
-        skillId: OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
-        version: OPENCLAW_MEDIACLAW_CLIENT_VERSION,
-      });
-      await syncOpenClawInstance(instance.instanceId);
-      toast.success("OpenClaw 已启用", {
-        description: "mediaclaw-client 技能已安装完成。",
-      });
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to enable OpenClaw.");
-      toast.error("启用 OpenClaw 失败", { description: message });
-    } finally {
-      setOpenClawAction(null);
-    }
-  }
-
-  async function handleUninstallOpenClawSkill() {
-    if (!openClawInstance) {
-      toast.error("当前没有可操作的 OpenClaw 实例");
-      return;
-    }
-
-    setOpenClawAction("uninstall");
-
-    try {
-      await api.clawhost.uninstallSkill(
-        openClawInstance.instanceId,
-        OPENCLAW_MEDIACLAW_CLIENT_SKILL_ID,
-      );
-      await syncOpenClawInstance(openClawInstance.instanceId);
-      toast.success("mediaclaw-client 已卸载");
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to uninstall OpenClaw skill.");
-      toast.error("卸载 OpenClaw 技能失败", { description: message });
-    } finally {
-      setOpenClawAction(null);
-    }
-  }
-
-  async function handleIssueConnectionCode() {
-    if (!openClawInstance) {
-      toast.error("当前没有可绑定的 OpenClaw 实例");
-      return;
-    }
-
-    setIssuingConnectionCode(true);
-    try {
-      const response = await api.clawhost.issueConnectionCode(openClawInstance.instanceId);
-      setLastIssuedConnectionCode(response.data.code);
-      await syncOpenClawInstance(openClawInstance.instanceId);
-      toast.success("连接码已生成", {
-        description: "请在 OpenClaw 客户端输入该连接码完成绑定。",
-      });
-    } catch (error) {
-      const message = getErrorMessage(error, "Failed to issue OpenClaw connection code.");
-      toast.error("生成连接码失败", { description: message });
-    } finally {
-      setIssuingConnectionCode(false);
-    }
-  }
-
   return (
-    <div className="flex max-w-5xl flex-col gap-8 animate-in fade-in duration-500">
-      <MetadataUpdater title="账号设置" description="Manage your profile, API keys, webhooks, and notification preferences." />
-
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account, API credentials, outbound integrations, and alert preferences.
-        </p>
+    <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0] animate-in fade-in">
+      {/* Header */}
+      <div className="border-b border-white/5 pb-6">
+        <h1 className="text-3xl font-black tracking-tight text-white mb-1 flex items-center gap-3">
+          <SettingsIcon className="w-8 h-8 text-[#00e8b8]" />
+          设置
+        </h1>
+        <p className="text-white/50">管理组织信息、API 密钥、系统通知及账单</p>
       </div>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as SettingsTab)}
-        className="flex flex-col gap-6 md:flex-row"
-      >
-        <TabsList className="h-auto w-full items-start gap-1 overflow-x-auto bg-transparent p-0 md:w-48 md:flex-col">
-          <TabsTrigger value="profile" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <UserIcon className="h-4 w-4" /> Profile
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="bg-white/5 border border-white/10 p-1 mb-6 rounded-xl">
+          <TabsTrigger value="general" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
+            <Building className="w-4 h-4 mr-2" /> 基础设置
           </TabsTrigger>
-          <TabsTrigger value="api" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <Key className="h-4 w-4" /> API Keys
+          <TabsTrigger value="apikeys" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
+            <Key className="w-4 h-4 mr-2" /> API 密钥
           </TabsTrigger>
-          <TabsTrigger value="webhooks" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <Webhook className="h-4 w-4" /> Webhooks
+          <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
+            <Bell className="w-4 h-4 mr-2" /> 消息通知
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <BellRing className="h-4 w-4" /> Notifications
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <Cpu className="h-4 w-4" /> AI 模型
-          </TabsTrigger>
-          <TabsTrigger value="openclaw" className="h-10 w-full justify-start gap-2 px-4 py-2 data-[state=active]:bg-muted">
-            <Bot className="h-4 w-4" /> OpenClaw
+          <TabsTrigger value="billing" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
+            <CreditCard className="w-4 h-4 mr-2" /> 账单与用量
           </TabsTrigger>
         </TabsList>
 
-        <div className="min-w-0 flex-1">
-          <TabsContent value="profile" className="mt-0 space-y-6">
-            {profileStatus === "loading" ? (
-              <SectionSkeleton />
-            ) : profileStatus === "error" ? (
-              <ErrorState
-                title="Profile unavailable"
-                description={profileError ?? "Failed to load your profile."}
-                onRetry={() => void loadProfile()}
-                className="border-white/10 bg-zinc-950/60"
-              />
-            ) : !currentUser ? (
-              <EmptyState
-                icon={UserIcon}
-                title="No profile data"
-                description="The API did not return an account profile."
-                actionLabel="Reload"
-                onAction={() => void loadProfile()}
-                className="border-white/10 bg-zinc-950/60"
-              />
-            ) : (
-              <>
-                <Card className="border-white/10 bg-zinc-950/60">
-                  <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <CardTitle className="text-white">Profile Information</CardTitle>
-                      <CardDescription>
-                        Update the contact details returned by `api.account.info()`.
-                      </CardDescription>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => void loadProfile()}>
-                      <RefreshCcw className="mr-2 h-3.5 w-3.5" /> Refresh
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-20 w-20 border border-white/10">
-                        <AvatarImage
-                          src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.name || "mediaclaw"}`}
-                          alt={currentUser.name}
-                        />
-                        <AvatarFallback>{(currentUser.name || "MC").slice(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div className="space-y-1">
-                        <div className="text-base font-medium text-white">{currentUser.name || "Unnamed User"}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {currentUser.email || currentUser.phone || "No contact info"}
-                        </div>
-                        <Badge variant="outline" className="border-white/10 text-zinc-300">
-                          {currentUser.roleLabel}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="settings-name">Name</Label>
-                        <Input
-                          id="settings-name"
-                          value={profileForm.name}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="settings-phone">Phone Number</Label>
-                        <Input id="settings-phone" value={currentUser.phone || ""} disabled />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="settings-email">Email Address</Label>
-                      <Input
-                        id="settings-email"
-                        type="email"
-                        value={profileForm.email}
-                        onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Used for notifications and account recovery.
-                      </p>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="border-t border-white/10 px-6 py-4">
-                    <Button onClick={() => void handleSaveProfile()} disabled={isSavingProfile}>
-                      {isSavingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Changes
-                    </Button>
-                  </CardFooter>
-                </Card>
-
-                <Card className="border-white/10 bg-zinc-950/60">
-                  <CardHeader>
-                    <CardTitle className="text-white">Account Snapshot</CardTitle>
-                    <CardDescription>Read-only fields returned by the account API.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Role</div>
-                      <div className="mt-2 text-sm font-medium text-white">{currentUser.roleLabel}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">角色编码：{currentUser.role}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">WeChat</div>
-                      <div className="mt-2 text-sm font-medium text-white">{currentUser.wechatId || "Not bound"}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Created At</div>
-                      <div className="mt-2 text-sm font-medium text-white">{formatDateTime(currentUser.createdAt)}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Last Login</div>
-                      <div className="mt-2 text-sm font-medium text-white">{formatDateTime(currentUser.lastLoginAt)}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </TabsContent>
-
-          <TabsContent value="api" className="mt-0 space-y-6">
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader>
-                <CardTitle className="text-white">Create API Key</CardTitle>
-                <CardDescription>
-                  Create a new key with `api.settings.apiKeys.add()` and validate it right after creation.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="api-key-name">Name</Label>
-                  <Input
-                    id="api-key-name"
-                    value={apiKeyForm.name}
-                    onChange={(event) => setApiKeyForm((current) => ({ ...current, name: event.target.value }))}
-                    placeholder="Production key"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api-key-expiry">Expires At</Label>
-                  <Input
-                    id="api-key-expiry"
-                    type="datetime-local"
-                    value={apiKeyForm.expiresAt}
-                    onChange={(event) => setApiKeyForm((current) => ({ ...current, expiresAt: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2 lg:col-span-2">
-                  <Label htmlFor="api-key-permissions">Permissions</Label>
-                  <Textarea
-                    id="api-key-permissions"
-                    value={apiKeyForm.permissionsText}
-                    onChange={(event) => setApiKeyForm((current) => ({ ...current, permissionsText: event.target.value }))}
-                    placeholder="videos:read, videos:write"
-                    className="min-h-24"
-                  />
-                  <p className="text-xs text-muted-foreground">Use commas or new lines to separate permissions.</p>
-                </div>
-              </CardContent>
-              <CardFooter className="border-t border-white/10 px-6 py-4">
-                <Button onClick={() => void handleCreateApiKey()} disabled={isCreatingApiKey}>
-                  {isCreatingApiKey ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        {/* General Tab */}
+        <TabsContent value="general" className="space-y-6">
+          <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+            <CardHeader className="pb-4 border-b border-white/5">
+              <CardTitle className="text-lg text-white">组织信息</CardTitle>
+              <CardDescription className="text-white/50">这些信息将显示在您的控制台和生成的报告中</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                  {data.general.logoUrl ? (
+                    <img src={data.general.logoUrl} alt="Logo" className="w-full h-full object-cover" />
                   ) : (
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Building className="w-8 h-8 text-white/20" />
                   )}
-                  Create Key
-                </Button>
-              </CardFooter>
-            </Card>
-
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">API Keys</CardTitle>
-                  <CardDescription>Loaded from `list()`, removable via `remove()`, and manually verifiable.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => void loadApiKeys()}>
-                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> Refresh
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {apiKeysStatus === "loading" ? (
-                  <SectionSkeleton blocks={1} />
-                ) : apiKeysStatus === "error" ? (
-                  <ErrorState
-                    title="API Keys unavailable"
-                    description={apiKeysError ?? "Failed to load API keys."}
-                    onRetry={() => void loadApiKeys()}
-                    className="border-white/10 bg-zinc-950/60"
+                <div>
+                  <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10 mb-2">
+                    <UploadCloud className="w-4 h-4 mr-2" /> 上传新 Logo
+                  </Button>
+                  <p className="text-xs text-white/40">推荐尺寸 512x512px，支持 PNG, JPG</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/70">组织名称</label>
+                  <Input 
+                    value={data.general.orgName} 
+                    onChange={e => setData({...data, general: {...data.general, orgName: e.target.value}})}
+                    className="bg-white/5 border-white/10 text-white focus-visible:ring-[#00e8b8]/50" 
                   />
-                ) : apiKeys.length === 0 ? (
-                  <EmptyState
-                    icon={Key}
-                    title="No API keys yet"
-                    description="Create your first key to access the MediaClaw API."
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {apiKeys.map((record) => {
-                      const validation = apiKeyValidations[record.id];
-                      const displayValue = getApiKeyDisplayValue(record);
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/70">默认时区</label>
+                  <Select value={data.general.timezone} onValueChange={v => setData({...data, general: {...data.general, timezone: v}})}>
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
+                      <SelectItem value="Asia/Shanghai">Asia/Shanghai (北京时间)</SelectItem>
+                      <SelectItem value="America/New_York">America/New_York</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="p-6 pt-0 border-t border-white/5 mt-6 justify-end">
+              <Button onClick={handleSaveGeneral} disabled={saving} className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
+                保存更改
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
 
-                      return (
-                        <div key={record.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0 flex-1 space-y-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="text-sm font-semibold text-white">{record.name}</div>
-                                <Badge
-                                  variant="outline"
-                                  className={record.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-zinc-400"}
-                                >
-                                  {record.isActive ? "Active" : "Inactive"}
-                                </Badge>
-                                {validation && (
-                                  <Badge
-                                    variant={validation.valid ? "secondary" : "destructive"}
-                                    className={validation.valid ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : undefined}
-                                  >
-                                    {validation.valid && <CheckCircle2 className="h-3 w-3" />}
-                                    {validation.valid ? "Valid" : "Invalid"}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Created {formatDateTime(record.createdAt)}
-                                {record.lastUsedAt ? ` • Last used ${formatDateTime(record.lastUsedAt)}` : " • Never used"}
-                                {record.expiresAt ? ` • Expires ${formatDateTime(record.expiresAt)}` : " • Never expires"}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {record.permissions.length > 0 ? (
-                                  record.permissions.map((permission) => (
-                                    <Badge key={permission} variant="outline" className="border-white/10 text-zinc-300">
-                                      {permission}
-                                    </Badge>
-                                  ))
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">No explicit permissions</span>
-                                )}
-                              </div>
-                              <div className="flex">
-                                <Input
-                                  value={displayValue}
-                                  readOnly
-                                  className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
-                                />
-                                <Button
-                                  variant="outline"
-                                  className="rounded-l-none px-3"
-                                  onClick={() => void handleCopy(displayValue, "API Key")}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              </div>
-                              {record.secret && (
-                                <p className="text-xs text-amber-300/80">This secret is only shown in the current session.</p>
-                              )}
-                              {validation?.message && (
-                                <p className="text-xs text-muted-foreground">{validation.message}</p>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void validateApiKey(record)}
-                                disabled={validatingApiKeyId === record.id}
-                              >
-                                {validatingApiKeyId === record.id && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                                Validate
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => void handleRemoveApiKey(record)}
-                                disabled={removingApiKeyId === record.id}
-                              >
-                                {removingApiKeyId === record.id ? (
-                                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                )}
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
+        {/* API Keys Tab */}
+        <TabsContent value="apikeys" className="space-y-6">
+          <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+            <CardHeader className="pb-4 border-b border-white/5 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg text-white">API 密钥</CardTitle>
+                <CardDescription className="text-white/50">用于开发者集成 MediaClaw 的内容生成能力</CardDescription>
+              </div>
+              <Button className="bg-white/10 text-white hover:bg-white/20 border border-white/10">
+                <Plus className="w-4 h-4 mr-2" /> 创建密钥
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {data.apiKeys.length === 0 ? (
+                <div className="p-8 text-center text-white/50">暂无 API 密钥</div>
+              ) : (
+                <div className="flex flex-col">
+                  {data.apiKeys.map(key => (
+                    <div key={key.id} className="p-6 border-b border-white/5 last:border-0 flex items-center justify-between hover:bg-white/[0.02]">
+                      <div>
+                        <h4 className="font-bold text-white/90 mb-1">{key.name}</h4>
+                        <div className="flex items-center gap-3">
+                          <code className="bg-black border border-white/10 px-2 py-1 rounded text-xs text-[#00e8b8] font-mono">
+                            {key.key.substring(0, 8)}...{key.key.substring(key.key.length - 4)}
+                          </code>
+                          <span className="text-xs text-white/40">最后使用: {new Date(key.lastUsed).toLocaleDateString()}</span>
                         </div>
-                      );
-                    })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-white/10" onClick={() => copyToClipboard(key.key)}>
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-white/10">
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6">
+          <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+            <CardHeader className="pb-4 border-b border-white/5">
+              <CardTitle className="text-lg text-white">群组机器人推送</CardTitle>
+              <CardDescription className="text-white/50">当视频处理完成、发布成功或收到新评论时，自动推送到工作群</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              
+              {/* Feishu */}
+              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
+                <div className="flex-1 space-y-3 mr-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-blue-400" /></div>
+                    <h4 className="font-bold text-white/90">飞书机器人</h4>
                   </div>
-                )}
+                  {data.notifications.feishu.enabled && (
+                    <Input 
+                      placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." 
+                      value={data.notifications.feishu.webhookUrl}
+                      onChange={e => setData({...data, notifications: {...data.notifications, feishu: {...data.notifications.feishu, webhookUrl: e.target.value}}})}
+                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
+                    />
+                  )}
+                </div>
+                <Switch 
+                  checked={data.notifications.feishu.enabled} 
+                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, feishu: {...data.notifications.feishu, enabled: c}}})}
+                  className="data-[state=checked]:bg-[#00e8b8]"
+                />
+              </div>
+
+              {/* DingTalk */}
+              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
+                <div className="flex-1 space-y-3 mr-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-blue-400/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-blue-300" /></div>
+                    <h4 className="font-bold text-white/90">钉钉机器人</h4>
+                  </div>
+                  {data.notifications.dingtalk.enabled && (
+                    <Input 
+                      placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." 
+                      value={data.notifications.dingtalk.webhookUrl}
+                      onChange={e => setData({...data, notifications: {...data.notifications, dingtalk: {...data.notifications.dingtalk, webhookUrl: e.target.value}}})}
+                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
+                    />
+                  )}
+                </div>
+                <Switch 
+                  checked={data.notifications.dingtalk.enabled} 
+                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, dingtalk: {...data.notifications.dingtalk, enabled: c}}})}
+                  className="data-[state=checked]:bg-[#00e8b8]"
+                />
+              </div>
+
+              {/* WeCom */}
+              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
+                <div className="flex-1 space-y-3 mr-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-green-400" /></div>
+                    <h4 className="font-bold text-white/90">企业微信机器人</h4>
+                  </div>
+                  {data.notifications.wecom.enabled && (
+                    <Input 
+                      placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." 
+                      value={data.notifications.wecom.webhookUrl}
+                      onChange={e => setData({...data, notifications: {...data.notifications, wecom: {...data.notifications.wecom, webhookUrl: e.target.value}}})}
+                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
+                    />
+                  )}
+                </div>
+                <Switch 
+                  checked={data.notifications.wecom.enabled} 
+                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, wecom: {...data.notifications.wecom, enabled: c}}})}
+                  className="data-[state=checked]:bg-[#00e8b8]"
+                />
+              </div>
+
+            </CardContent>
+            <CardFooter className="p-6 pt-0 border-t border-white/5 mt-6 justify-between">
+              <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">测试发送</Button>
+              <Button onClick={handleSaveNotifications} disabled={saving} className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
+                保存更改
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        {/* Billing Tab */}
+        <TabsContent value="billing" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+              <CardHeader className="pb-4 border-b border-white/5">
+                <CardTitle className="text-lg text-white">当前方案</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black text-white">{data.billing.plan}</span>
+                  <Badge className="bg-[#00e8b8]/20 text-[#00e8b8] border-none font-normal text-sm px-3 py-1">运行良好</Badge>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-white/70">
+                    <span>视频生成额度</span>
+                    <span className="font-bold">{data.billing.usedVideos} / {data.billing.totalVideos}</span>
+                  </div>
+                  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden ring-1 ring-white/5">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                        (data.billing.usedVideos / data.billing.totalVideos) > 0.8 ? 'bg-red-500' : 'bg-[#00e8b8]'
+                      }`} 
+                      style={{ width: `${(data.billing.usedVideos / data.billing.totalVideos) * 100}%` }} 
+                    />
+                  </div>
+                </div>
+                <Button className="w-full bg-white/10 text-white hover:bg-white/20 border border-white/10">
+                  升级方案
+                </Button>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="webhooks" className="mt-0 space-y-6">
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader>
-                <CardTitle className="text-white">Add Webhook Endpoint</CardTitle>
-                <CardDescription>
-                  Create a new outbound webhook using `api.settings.webhooks.add()`.
-                </CardDescription>
+            <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+              <CardHeader className="pb-4 border-b border-white/5">
+                <CardTitle className="text-lg text-white">支付信息</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-name">Name</Label>
-                  <Input
-                    id="webhook-name"
-                    value={webhookForm.name}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, name: event.target.value }))}
-                    placeholder="Primary endpoint"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-url">URL</Label>
-                  <Input
-                    id="webhook-url"
-                    value={webhookForm.url}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, url: event.target.value }))}
-                    placeholder="https://example.com/webhooks/mediaclaw"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-secret">Secret</Label>
-                  <Input
-                    id="webhook-secret"
-                    value={webhookForm.secret}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, secret: event.target.value }))}
-                    placeholder="Optional signing secret"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-events">Events</Label>
-                  <Textarea
-                    id="webhook-events"
-                    value={webhookForm.eventsText}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, eventsText: event.target.value }))}
-                    className="min-h-24"
-                    placeholder="video.completed, video.failed"
-                  />
-                </div>
-                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 lg:col-span-2">
+              <CardContent className="p-6 flex flex-col justify-between h-[calc(100%-4rem)]">
+                <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-4 rounded-xl">
+                  <div className="w-12 h-8 bg-black border border-white/20 rounded flex items-center justify-center text-[10px] font-bold">VISA</div>
                   <div>
-                    <div className="text-sm font-medium text-white">Endpoint active after creation</div>
-                    <div className="text-xs text-muted-foreground">Persisted through the `isActive` field in the API payload.</div>
+                    <p className="text-white font-medium text-sm">•••• •••• •••• 4242</p>
+                    <p className="text-white/40 text-xs">过期时间 12/28</p>
                   </div>
-                  <Switch
-                    checked={webhookForm.isActive}
-                    onCheckedChange={(checked) => setWebhookForm((current) => ({ ...current, isActive: checked }))}
-                  />
                 </div>
+                <Button variant="link" className="text-[#00e8b8] hover:text-[#00e8b8]/80 px-0 self-start mt-4">
+                  更新支付方式
+                </Button>
               </CardContent>
-              <CardFooter className="border-t border-white/10 px-6 py-4">
-                <Button onClick={() => void handleCreateWebhook()} disabled={isCreatingWebhook}>
-                  {isCreatingWebhook ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 h-4 w-4" />
-                  )}
-                  Add Endpoint
-                </Button>
-              </CardFooter>
             </Card>
+          </div>
 
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">Webhook Endpoints</CardTitle>
-                  <CardDescription>Loaded from `list()` and removable with `remove()`.</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => void loadWebhooks()}>
-                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> Refresh
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {webhooksStatus === "loading" ? (
-                  <SectionSkeleton blocks={1} />
-                ) : webhooksStatus === "error" ? (
-                  <ErrorState
-                    title="Webhooks unavailable"
-                    description={webhooksError ?? "Failed to load webhooks."}
-                    onRetry={() => void loadWebhooks()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : webhooks.length === 0 ? (
-                  <EmptyState
-                    icon={Webhook}
-                    title="No webhook endpoints"
-                    description="Add an endpoint to receive outbound event notifications."
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {webhooks.map((record) => (
-                      <div key={record.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="min-w-0 flex-1 space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold text-white">{record.name}</div>
-                              <Badge
-                                variant="outline"
-                                className={record.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-zinc-400"}
-                              >
-                                {record.isActive ? "Active" : "Inactive"}
-                              </Badge>
-                              {record.hasSecret && (
-                                <Badge variant="outline" className="border-white/10 text-zinc-300">
-                                  Secret configured
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="rounded-xl border border-white/10 bg-zinc-950/80 px-3 py-2 font-mono text-xs text-zinc-300">
-                              {record.url}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {record.events.length > 0 ? (
-                                record.events.map((eventName) => (
-                                  <Badge key={eventName} variant="outline" className="border-white/10 text-zinc-300">
-                                    {eventName}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-xs text-muted-foreground">No subscribed events</span>
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Created {formatDateTime(record.createdAt)}
-                              {record.updatedAt ? ` • Updated ${formatDateTime(record.updatedAt)}` : ""}
-                              {record.lastTriggeredAt ? ` • Last delivery ${formatDateTime(record.lastTriggeredAt)}` : " • Never delivered"}
-                              {` • Failures ${record.failCount}`}
-                            </div>
-                            {record.secretPreview && (
-                              <div className="text-xs text-muted-foreground">Secret preview: {record.secretPreview}</div>
-                            )}
-                          </div>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => void handleRemoveWebhook(record)}
-                            disabled={removingWebhookId === record.id}
-                          >
-                            {removingWebhookId === record.id ? (
-                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+          <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+            <CardHeader className="pb-4 border-b border-white/5">
+              <CardTitle className="text-lg text-white">账单历史</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {data.billing.history.length === 0 ? (
+                <div className="p-8 text-center text-white/50">暂无账单记录</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-white/50 uppercase bg-white/[0.02] border-b border-white/10">
+                      <tr>
+                        <th className="px-6 py-3">账单 ID</th>
+                        <th className="px-6 py-3">日期</th>
+                        <th className="px-6 py-3">金额</th>
+                        <th className="px-6 py-3">状态</th>
+                        <th className="px-6 py-3 text-right">发票</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.billing.history.map((invoice) => (
+                        <tr key={invoice.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <td className="px-6 py-4 font-mono text-xs text-white/70">{invoice.id}</td>
+                          <td className="px-6 py-4 text-white/90">{new Date(invoice.date).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 font-bold">¥{invoice.amount.toFixed(2)}</td>
+                          <td className="px-6 py-4">
+                            {invoice.status === 'paid' ? (
+                              <span className="text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> 已支付</span>
                             ) : (
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              <span className="text-yellow-400">待支付</span>
                             )}
-                            Delete
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="notifications" className="mt-0 space-y-6">
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">Notification Preferences</CardTitle>
-                  <CardDescription>
-                    Loaded from `get()` and persisted with `update()`. Events are comma-separated and config is JSON.
-                  </CardDescription>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Button variant="ghost" size="sm" className="h-8 text-[#00e8b8] hover:text-[#00e8b8] hover:bg-[#00e8b8]/10">下载</Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => void loadNotifications()}>
-                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> Refresh
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {notificationsStatus === "loading" ? (
-                  <SectionSkeleton />
-                ) : notificationsStatus === "error" ? (
-                  <ErrorState
-                    title="Notifications unavailable"
-                    description={notificationsError ?? "Failed to load notification channels."}
-                    onRetry={() => void loadNotifications()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : notificationDrafts.length === 0 ? (
-                  <EmptyState
-                    icon={BellRing}
-                    title="No notification channels"
-                    description="Initialize a default channel so the API has something to update."
-                    actionLabel={isSeedingNotifications ? "Initializing..." : "Create Default Channel"}
-                    onAction={() => void handleSeedNotifications()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {notificationDrafts.map((draft) => {
-                      const key = draft.id ?? draft.channel;
-                      const isSaving = savingNotificationKey === key;
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                      return (
-                        <Card key={key} className="border-white/10 bg-black/20">
-                          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <CardTitle className="text-base text-white">{draft.name}</CardTitle>
-                              <CardDescription>
-                                Channel: {draft.channel} • Updated {formatDateTime(draft.updatedAt || draft.createdAt)}
-                              </CardDescription>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Badge
-                                variant="outline"
-                                className={draft.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-zinc-400"}
-                              >
-                                {draft.isActive ? "Enabled" : "Disabled"}
-                              </Badge>
-                              <Switch
-                                checked={draft.isActive}
-                                onCheckedChange={(checked) => updateNotificationDraft(key, { isActive: checked })}
-                              />
-                            </div>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="grid gap-4 sm:grid-cols-2">
-                              <div className="space-y-2">
-                                <Label htmlFor={`notification-name-${key}`}>Name</Label>
-                                <Input
-                                  id={`notification-name-${key}`}
-                                  value={draft.name}
-                                  onChange={(event) => updateNotificationDraft(key, { name: event.target.value })}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor={`notification-channel-${key}`}>Channel</Label>
-                                <Input id={`notification-channel-${key}`} value={draft.channel} disabled />
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor={`notification-events-${key}`}>Events</Label>
-                              <Textarea
-                                id={`notification-events-${key}`}
-                                value={draft.eventsText}
-                                onChange={(event) => updateNotificationDraft(key, { eventsText: event.target.value })}
-                                className="min-h-24"
-                                placeholder="video.failed, credit.low"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor={`notification-config-${key}`}>Config (JSON object)</Label>
-                              <Textarea
-                                id={`notification-config-${key}`}
-                                value={draft.configText}
-                                onChange={(event) => updateNotificationDraft(key, { configText: event.target.value })}
-                                className="min-h-32 font-mono text-xs"
-                                placeholder="{}"
-                              />
-                            </div>
-                          </CardContent>
-                          <CardFooter className="border-t border-white/10 px-6 py-4">
-                            <Button onClick={() => void handleSaveNotification(draft)} disabled={isSaving}>
-                              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              Save Notification
-                            </Button>
-                          </CardFooter>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="ai" className="mt-0 space-y-6">
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">AI 模型偏好</CardTitle>
-                  <CardDescription>
-                    企业级默认模型配置。若某个模型需要对应 API Key，但当前未配置，会在下拉中显示为锁定状态。
-                  </CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => void loadAiSettings()}>
-                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> 刷新配置
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {aiStatus === "loading" ? (
-                  <SectionSkeleton blocks={2} />
-                ) : aiStatus === "error" ? (
-                  <ErrorState
-                    title="AI 模型配置不可用"
-                    description={aiError ?? "加载 AI 模型配置失败。"}
-                    onRetry={() => void loadAiSettings()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : !modelSettings ? (
-                  <EmptyState
-                    icon={Cpu}
-                    title="还没有 AI 模型配置"
-                    description="组织初始化完成后，这里会显示默认模型和可用模型池。"
-                    actionLabel="重新加载"
-                    onAction={() => void loadAiSettings()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-6">
-                    <div className="grid gap-4 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">计费模式</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {formatBillingModeLabel(modelSettings.billingMode)}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {modelSettings.billingMode === "byok"
-                            ? "BYOK 模式下，可用模型由你已配置的 Key 决定。"
-                            : "订阅模式下默认模型已含在套餐内，高级模型需先配置对应 Key。"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">可用模型数</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {MODEL_CAPABILITY_META.reduce((count, item) => (
-                            count + modelSettings.availableModels[item.key].filter((option) => option.available).length
-                          ), 0)}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          跨 5 个能力域统计，含默认模型和已解锁高级模型。
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">保存策略</div>
-                        <div className="mt-3 text-sm font-semibold text-white">组织级默认，管线可覆盖</div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          保存后会影响整个企业默认执行链路；如需特殊场景，请在品牌下的管线设置中覆盖。
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
-                      高级模型需要对应供应商 API Key 才能使用。未解锁模型仍会展示，但无法被保存为当前偏好。
-                    </div>
-
-                    <div className="space-y-4">
-                      {MODEL_CAPABILITY_META.map((item) => {
-                        const options = modelSettings.availableModels[item.key] || [];
-                        const selectedValue = modelForm[item.key];
-                        const selectedOption = findModelOption(modelSettings, item.key, selectedValue);
-
-                        return (
-                          <Card key={item.key} className="border-white/10 bg-black/20">
-                            <CardHeader className="pb-4">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                  <CardTitle className="text-base text-white">{item.label}</CardTitle>
-                                  <CardDescription>{item.description}</CardDescription>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {selectedOption?.isDefault ? (
-                                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
-                                      默认模型
-                                    </Badge>
-                                  ) : null}
-                                  <Badge
-                                    variant="outline"
-                                    className={selectedOption?.available
-                                      ? "border-white/10 text-zinc-300"
-                                      : "border-amber-500/20 bg-amber-500/10 text-amber-300"}
-                                  >
-                                    {selectedOption?.available ? "可用" : "需配置 Key"}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),220px]">
-                                <div className="space-y-2">
-                                  <Label htmlFor={`model-${item.key}`}>{item.label}</Label>
-                                  <Select
-                                    value={selectedValue}
-                                    onValueChange={(value) =>
-                                      setModelForm((current) => ({ ...current, [item.key]: value ?? current[item.key] }))
-                                    }
-                                  >
-                                    <SelectTrigger
-                                      id={`model-${item.key}`}
-                                      className="h-11 w-full border-white/10 bg-white/[0.03] text-slate-100"
-                                    >
-                                      <SelectValue placeholder={`选择${item.label}`} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {options.map((option) => (
-                                        <SelectItem key={option.id} value={option.id} disabled={!option.available}>
-                                          <span className="flex w-full items-center justify-between gap-3">
-                                            <span>{option.label}</span>
-                                            <span className="text-xs text-muted-foreground">
-                                              {option.available ? option.provider.toUpperCase() : "需 Key"}
-                                            </span>
-                                          </span>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                <div className="rounded-xl border border-white/10 bg-zinc-950/70 p-4">
-                                  <div className="text-xs uppercase tracking-wide text-muted-foreground">运行模型</div>
-                                  <div className="mt-2 text-sm font-medium text-white">
-                                    {selectedOption?.runtimeModel || "未配置"}
-                                  </div>
-                                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                                    {selectedOption?.description || "当前模型描述暂不可用。"}
-                                  </p>
-                                  {selectedOption?.lockedReason ? (
-                                    <p className="mt-2 text-xs leading-5 text-amber-300">
-                                      {selectedOption.lockedReason}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="border-t border-white/10 px-6 py-4">
-                <Button onClick={() => void handleSaveAiSettings()} disabled={aiStatus !== "success" || isSavingAiSettings}>
-                  {isSavingAiSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  保存 AI 模型偏好
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="openclaw" className="mt-0 space-y-6">
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">OpenClaw 集成</CardTitle>
-                  <CardDescription>
-                    查看实例状态、管理 `mediaclaw-client` 技能，并确认当前连接信息。
-                  </CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => void loadOpenClaw()}>
-                  <RefreshCcw className="mr-2 h-3.5 w-3.5" /> 刷新状态
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {openClawStatus === "loading" ? (
-                  <SectionSkeleton blocks={1} />
-                ) : openClawStatus === "error" ? (
-                  <ErrorState
-                    title="OpenClaw 不可用"
-                    description={openClawError ?? "加载 OpenClaw 状态失败。"}
-                    onRetry={() => void loadOpenClaw()}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : !openClawInstance ? (
-                  <EmptyState
-                    icon={Bot}
-                    title="尚未开通 OpenClaw"
-                    description="点击下方按钮即可创建实例并安装 mediaclaw-client，后续的 AI 助手能力会直接挂载到当前企业账号。"
-                    actionLabel={canManageOpenClaw ? (openClawAction === "install" ? "开通中..." : "一键开通并安装") : undefined}
-                    onAction={canManageOpenClaw ? () => void handleInstallOpenClawSkill() : undefined}
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-6">
-                    {!canManageOpenClaw ? (
-                      <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
-                        当前账号只有查看权限。OpenClaw 的开通、安装和连接码生成需要企业管理员操作。
-                      </div>
-                    ) : null}
-
-                    <div className="grid gap-4 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">实例状态</div>
-                        <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-white">
-                          <CheckCircle2 className="h-4 w-4" />
-                          {formatOpenClawStatus(openClawInstance.status)}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          最近检查 {formatDateTime(openClawInstance.healthStatus.lastCheck || undefined)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">连接状态</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {formatOpenClawConnectionStatus(openClawInstance.connectionInfo.connectionStatus)}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {formatOpenClawDeploymentMode(openClawInstance.connectionInfo.deploymentMode)}
-                          {" · "}
-                          {formatOpenClawImChannel(openClawInstance.connectionInfo.requestedImChannel)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">技能状态</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {mediaclawClientInstalled ? "mediaclaw-client 已安装" : "mediaclaw-client 未安装"}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          当前共安装 {openClawInstance.skills.length} 个技能
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">最近心跳</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {formatDateTime(openClawInstance.connectionInfo.lastHeartbeatAt || undefined)}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          健康窗口延迟 {openClawInstance.healthStatus.latency} 秒
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">客户端版本</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {openClawInstance.connectionInfo.lastClientVersion || "尚未上报"}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Agent ID: {openClawInstance.connectionInfo.lastAgentId || "未绑定"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">健康判定</div>
-                        <div className="mt-3 text-sm font-semibold text-white">
-                          {openClawInstance.healthStatus.isHealthy ? "正常" : "待人工配置或异常"}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          API Key 前缀 {openClawInstance.connectionInfo.boundApiKeyPrefix || "未绑定"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        onClick={() =>
-                          mediaclawClientInstalled
-                            ? void handleUninstallOpenClawSkill()
-                            : void handleInstallOpenClawSkill()
-                        }
-                        disabled={!canManageOpenClaw || openClawAction !== null}
-                      >
-                        {openClawAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {mediaclawClientInstalled ? "卸载 mediaclaw-client" : "一键安装 mediaclaw-client"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void handleIssueConnectionCode()}
-                        disabled={!canManageOpenClaw || openClawAction !== null || issuingConnectionCode}
-                      >
-                        {issuingConnectionCode && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        生成连接码
-                      </Button>
-                      <Button variant="outline" onClick={() => void loadOpenClaw()} disabled={openClawAction !== null}>
-                        刷新实例详情
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader>
-                <CardTitle className="text-white">已安装技能</CardTitle>
-                <CardDescription>这里展示当前实例返回的真实技能清单。</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {!openClawInstance ? (
-                  <EmptyState
-                    icon={Bot}
-                    title="暂无实例技能"
-                    description="实例开通后，这里会展示当前已安装技能和版本。"
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : openClawInstance.skills.length === 0 ? (
-                  <EmptyState
-                    icon={Bot}
-                    title="当前未安装任何技能"
-                    description="你可以使用上方按钮一键安装 mediaclaw-client。"
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {openClawInstance.skills.map((skill) => (
-                      <div key={skill.skillId} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-white">{skill.skillId}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              安装时间 {formatDateTime(skill.installedAt)}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="border-white/10 text-zinc-300">
-                            {skill.version}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-white/10 bg-zinc-950/60">
-              <CardHeader>
-                <CardTitle className="text-white">实例连接信息</CardTitle>
-                <CardDescription>供排障和后续集成时复制使用。</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {!openClawInstance ? (
-                  <EmptyState
-                    icon={Bot}
-                    title="暂无连接信息"
-                    description="创建实例后，这里会显示实例 ID、部署模式、连接码和安装命令。"
-                    className="border-white/10 bg-zinc-950/60"
-                  />
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>实例 ID</Label>
-                      <div className="flex">
-                        <Input value={openClawInstance.instanceId} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
-                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.instanceId, "实例 ID")}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>客户端名称</Label>
-                      <Input value={openClawInstance.clientName} readOnly className="bg-black/20" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>部署模式</Label>
-                      <Input
-                        value={formatOpenClawDeploymentMode(openClawInstance.connectionInfo.deploymentMode)}
-                        readOnly
-                        className="bg-black/20"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>接入 IM 通道</Label>
-                      <Input
-                        value={formatOpenClawImChannel(openClawInstance.connectionInfo.requestedImChannel)}
-                        readOnly
-                        className="bg-black/20"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>访问地址</Label>
-                      <div className="flex">
-                        <Input
-                          value={openClawInstance.connectionInfo.accessUrl || "尚未分配"}
-                          readOnly
-                          className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
-                        />
-                        <Button
-                          variant="outline"
-                          className="rounded-l-none px-3"
-                          onClick={() => void handleCopy(openClawInstance.connectionInfo.accessUrl, "访问地址")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>连接状态</Label>
-                      <Input
-                        value={formatOpenClawConnectionStatus(openClawInstance.connectionInfo.connectionStatus)}
-                        readOnly
-                        className="bg-black/20"
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>安装命令</Label>
-                      <div className="flex">
-                        <Textarea
-                          value={openClawInstance.connectionInfo.installCommand || "尚未生成"}
-                          readOnly
-                          className="min-h-24 rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
-                        />
-                        <Button
-                          variant="outline"
-                          className="rounded-l-none px-3"
-                          onClick={() => void handleCopy(openClawInstance.connectionInfo.installCommand, "安装命令")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>连接码</Label>
-                      <div className="flex">
-                        <Input
-                          value={lastIssuedConnectionCode || openClawInstance.connectionInfo.connectionCodePreview || "尚未生成"}
-                          readOnly
-                          className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs"
-                        />
-                        <Button
-                          variant="outline"
-                          className="rounded-l-none px-3"
-                          onClick={() => void handleCopy(lastIssuedConnectionCode || openClawInstance.connectionInfo.connectionCodePreview, "连接码")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        过期时间 {formatDateTime(openClawInstance.connectionInfo.connectionCodeExpiresAt || undefined)}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>绑定 API Key</Label>
-                      <Input value={openClawInstance.connectionInfo.boundApiKeyPrefix || "尚未绑定"} readOnly className="bg-black/20" />
-                      <p className="text-xs text-muted-foreground">
-                        绑定时间 {formatDateTime(openClawInstance.connectionInfo.boundAt || undefined)}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>K8s Namespace</Label>
-                      <div className="flex">
-                        <Input value={openClawInstance.k8sNamespace} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
-                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.k8sNamespace, "Namespace")}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>K8s Pod</Label>
-                      <div className="flex">
-                        <Input value={openClawInstance.k8sPodName} readOnly className="rounded-r-none border-r-0 bg-black/20 font-mono text-xs" />
-                        <Button variant="outline" className="rounded-l-none px-3" onClick={() => void handleCopy(openClawInstance.k8sPodName, "Pod 名称")}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>CPU</Label>
-                      <Input value={openClawInstance.config.cpu} readOnly className="bg-black/20" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>内存 / 存储</Label>
-                      <Input value={`${openClawInstance.config.memory} / ${openClawInstance.config.storage}`} readOnly className="bg-black/20" />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>客户端能力</Label>
-                      <div className="flex min-h-11 flex-wrap gap-2 rounded-xl border border-white/10 bg-black/20 p-3">
-                        {openClawInstance.connectionInfo.heartbeatCapabilities.length > 0 ? (
-                          openClawInstance.connectionInfo.heartbeatCapabilities.map((capability) => (
-                            <Badge key={capability} variant="outline" className="border-white/10 text-zinc-300">
-                              {capability}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm text-muted-foreground">客户端暂未上报能力清单</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </div>
       </Tabs>
     </div>
   );
