@@ -14,7 +14,10 @@ import {
   Trash2,
   Plus,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  Activity,
+  Check,
+  X
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +26,25 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+
+interface Webhook {
+  id: string;
+  destination: "feishu" | "dingtalk" | "wecom" | "custom";
+  url: string;
+  events: string[];
+  status: "active" | "inactive";
+}
+
+interface WebhookLog {
+  id: string;
+  date: string;
+  event: string;
+  destination: string;
+  status: "success" | "failed";
+}
 
 interface SettingsData {
   general: {
@@ -33,11 +54,8 @@ interface SettingsData {
     logoUrl?: string;
   };
   apiKeys: Array<{ id: string; name: string; key: string; lastUsed: string }>;
-  notifications: {
-    feishu: { enabled: boolean; webhookUrl: string };
-    dingtalk: { enabled: boolean; webhookUrl: string };
-    wecom: { enabled: boolean; webhookUrl: string };
-  };
+  webhooks: Webhook[];
+  webhookLogs: WebhookLog[];
   billing: {
     plan: string;
     usedVideos: number;
@@ -51,30 +69,36 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  
+  // Add Webhook State
+  const [addWebhookOpen, setAddWebhookOpen] = useState(false);
+  const [newWebhook, setNewWebhook] = useState<{destination: "feishu" | "dingtalk" | "wecom" | "custom", url: string, events: string[]}>({
+    destination: "feishu",
+    url: "",
+    events: ["video_ready"]
+  });
 
   const fetchSettings = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [settingsRes, apiKeysRes, billingRes] = await Promise.all([
+      const [settingsRes, apiKeysRes, billingRes, webhooksRes] = await Promise.all([
         fetch("/api/v1/settings").catch(() => null),
         fetch("/api/v1/apikey").catch(() => null),
-        fetch("/api/v1/billing/usage").catch(() => null)
+        fetch("/api/v1/billing/usage").catch(() => null),
+        fetch("/api/v1/webhooks").catch(() => null)
       ]);
 
-      // Handle failures gracefully with partial mock fallback to prevent crash if APIs not ready
       const s = settingsRes?.ok ? await settingsRes.json() : {};
       const k = apiKeysRes?.ok ? await apiKeysRes.json() : { data: [] };
       const b = billingRes?.ok ? await billingRes.json() : {};
+      const w = webhooksRes?.ok ? await webhooksRes.json() : { data: [], logs: [] };
 
       setData({
         general: s.general || { orgName: "MediaClaw Demo", timezone: "Asia/Shanghai", language: "zh-CN" },
         apiKeys: Array.isArray(k.data) ? k.data : [],
-        notifications: s.notifications || {
-          feishu: { enabled: false, webhookUrl: "" },
-          dingtalk: { enabled: false, webhookUrl: "" },
-          wecom: { enabled: false, webhookUrl: "" }
-        },
+        webhooks: Array.isArray(w.data) ? w.data : [],
+        webhookLogs: Array.isArray(w.logs) ? w.logs : [],
         billing: b.data || { plan: "Pro", usedVideos: 124, totalVideos: 500, history: [] }
       });
     } catch (err: any) {
@@ -106,20 +130,34 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveNotifications = async () => {
-    setSaving(true);
+  const handleAddWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWebhook.url) return toast.error("请输入 Webhook URL");
+    if (newWebhook.events.length === 0) return toast.error("请至少选择一个订阅事件");
+    
     try {
-      const res = await fetch("/api/v1/settings", {
-        method: "PATCH",
+      const res = await fetch("/api/v1/webhooks", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notifications: data?.notifications })
+        body: JSON.stringify(newWebhook)
       });
-      if (!res.ok) throw new Error("保存失败");
-      toast.success("通知设置已更新");
+      if (!res.ok) throw new Error("添加失败");
+      toast.success("Webhook 添加成功");
+      setAddWebhookOpen(false);
+      setNewWebhook({ destination: "feishu", url: "", events: ["video_ready"] });
+      fetchSettings();
     } catch (err: any) {
-      toast.error(err.message || "设置更新失败");
-    } finally {
-      setSaving(false);
+      toast.error(err.message || "添加 Webhook 失败");
+    }
+  };
+
+  const handleTestWebhook = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/webhooks/${id}/test`, { method: "POST" });
+      if (!res.ok) throw new Error("测试失败");
+      toast.success("测试消息已发送");
+    } catch (err: any) {
+      toast.error(err.message || "发送测试消息失败");
     }
   };
 
@@ -146,9 +184,15 @@ export default function SettingsPage() {
     );
   }
 
+  const availableEvents = [
+    { id: "video_ready", label: "视频生成完成" },
+    { id: "published", label: "视频发布成功" },
+    { id: "failed", label: "任务执行失败" },
+    { id: "daily_report", label: "每日数据推送" }
+  ];
+
   return (
     <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0] animate-in fade-in">
-      {/* Header */}
       <div className="border-b border-white/5 pb-6">
         <h1 className="text-3xl font-black tracking-tight text-white mb-1 flex items-center gap-3">
           <SettingsIcon className="w-8 h-8 text-[#00e8b8]" />
@@ -166,7 +210,7 @@ export default function SettingsPage() {
             <Key className="w-4 h-4 mr-2" /> API 密钥
           </TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
-            <Bell className="w-4 h-4 mr-2" /> 消息通知
+            <Bell className="w-4 h-4 mr-2" /> 消息推送 (Webhooks)
           </TabsTrigger>
           <TabsTrigger value="billing" className="rounded-lg data-[state=active]:bg-[#0b0f1a] data-[state=active]:text-[#00e8b8]">
             <CreditCard className="w-4 h-4 mr-2" /> 账单与用量
@@ -259,9 +303,6 @@ export default function SettingsPage() {
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-white/10" onClick={() => copyToClipboard(key.key)}>
                           <Copy className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/50 hover:text-white hover:bg-white/10">
-                          <RefreshCw className="w-4 h-4" />
-                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10">
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -274,92 +315,164 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Notifications Tab */}
+        {/* Notifications (Webhooks) Tab */}
         <TabsContent value="notifications" className="space-y-6">
-          <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
-            <CardHeader className="pb-4 border-b border-white/5">
-              <CardTitle className="text-lg text-white">群组机器人推送</CardTitle>
-              <CardDescription className="text-white/50">当视频处理完成、发布成功或收到新评论时，自动推送到工作群</CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              
-              {/* Feishu */}
-              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
-                <div className="flex-1 space-y-3 mr-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-blue-400" /></div>
-                    <h4 className="font-bold text-white/90">飞书机器人</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+                <CardHeader className="pb-4 border-b border-white/5 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg text-white">Webhook 列表</CardTitle>
+                    <CardDescription className="text-white/50">当系统事件发生时主动推送到第三方服务</CardDescription>
                   </div>
-                  {data.notifications.feishu.enabled && (
-                    <Input 
-                      placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." 
-                      value={data.notifications.feishu.webhookUrl}
-                      onChange={e => setData({...data, notifications: {...data.notifications, feishu: {...data.notifications.feishu, webhookUrl: e.target.value}}})}
-                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
-                    />
+                  <Dialog open={addWebhookOpen} onOpenChange={setAddWebhookOpen}>
+                    <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-9 bg-white/10 text-white hover:bg-white/20 border border-white/10 px-4">
+                      <Plus className="w-4 h-4 mr-2" /> 新增 Webhook
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#0b0f1a] border-white/10 text-white sm:rounded-2xl">
+                      <DialogHeader>
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                          <Activity className="w-5 h-5 text-[#00e8b8]" /> 添加 Webhook
+                        </DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleAddWebhook} className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-white/70">目标类型</label>
+                          <Select value={newWebhook.destination} onValueChange={v => v && setNewWebhook({...newWebhook, destination: v as any})}>
+                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
+                              <SelectItem value="feishu">飞书机器人</SelectItem>
+                              <SelectItem value="dingtalk">钉钉机器人</SelectItem>
+                              <SelectItem value="wecom">企业微信</SelectItem>
+                              <SelectItem value="custom">自定义 HTTP API</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-white/70">Webhook URL</label>
+                          <Input 
+                            required 
+                            placeholder="https://..." 
+                            value={newWebhook.url} 
+                            onChange={e => setNewWebhook({...newWebhook, url: e.target.value})} 
+                            className="bg-white/5 border-white/10 text-white font-mono text-xs focus-visible:ring-[#00e8b8]/50" 
+                          />
+                        </div>
+                        <div className="space-y-3 pt-2">
+                          <label className="text-xs font-medium text-white/70">订阅事件</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            {availableEvents.map(event => (
+                              <div key={event.id} className="flex items-center space-x-2">
+                                <Checkbox 
+                                  id={`evt-${event.id}`}
+                                  checked={newWebhook.events.includes(event.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) setNewWebhook({...newWebhook, events: [...newWebhook.events, event.id]});
+                                    else setNewWebhook({...newWebhook, events: newWebhook.events.filter(e => e !== event.id)});
+                                  }}
+                                  className="border-white/40 data-[state=checked]:bg-[#00e8b8] data-[state=checked]:border-[#00e8b8]" 
+                                />
+                                <label htmlFor={`evt-${event.id}`} className="text-sm font-medium leading-none text-white/80 peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                  {event.label}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <DialogFooter className="pt-4 border-t border-white/5 mt-4">
+                          <Button type="button" variant="ghost" onClick={() => setAddWebhookOpen(false)} className="text-white/50 hover:text-white">取消</Button>
+                          <Button type="submit" className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">保存设置</Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {data.webhooks.length === 0 ? (
+                    <div className="p-12 text-center text-white/40">暂未配置 Webhook</div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {data.webhooks.map(wh => (
+                        <div key={wh.id} className="p-5 border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                wh.destination === 'feishu' ? 'bg-blue-500/20 text-blue-400' :
+                                wh.destination === 'dingtalk' ? 'bg-blue-400/20 text-blue-300' :
+                                wh.destination === 'wecom' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'
+                              }`}>
+                                <MessageSquare className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-white/90 capitalize">{wh.destination}</h4>
+                                <span className={`text-[10px] uppercase font-bold px-1.5 rounded ${wh.status === 'active' ? 'bg-[#00e8b8]/20 text-[#00e8b8]' : 'bg-white/10 text-white/40'}`}>
+                                  {wh.status}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" onClick={() => handleTestWebhook(wh.id)} className="h-8 text-xs bg-white/5 border-white/10 text-white hover:bg-white/10">
+                                测试
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="space-y-3 pl-11">
+                            <p className="text-xs font-mono text-white/40 truncate bg-black/50 p-1.5 rounded border border-white/5">{wh.url}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {wh.events.map(e => (
+                                <Badge key={e} variant="outline" className="bg-white/5 border-white/10 text-white/60 text-[9px] font-normal px-1.5 py-0">{e}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
-                <Switch 
-                  checked={data.notifications.feishu.enabled} 
-                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, feishu: {...data.notifications.feishu, enabled: c}}})}
-                  className="data-[state=checked]:bg-[#00e8b8]"
-                />
-              </div>
+                </CardContent>
+              </Card>
+            </div>
 
-              {/* DingTalk */}
-              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
-                <div className="flex-1 space-y-3 mr-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-blue-400/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-blue-300" /></div>
-                    <h4 className="font-bold text-white/90">钉钉机器人</h4>
-                  </div>
-                  {data.notifications.dingtalk.enabled && (
-                    <Input 
-                      placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." 
-                      value={data.notifications.dingtalk.webhookUrl}
-                      onChange={e => setData({...data, notifications: {...data.notifications, dingtalk: {...data.notifications.dingtalk, webhookUrl: e.target.value}}})}
-                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
-                    />
+            <div className="space-y-6">
+              <Card className="bg-[#0b0f1a] border-white/10 shadow-none">
+                <CardHeader className="pb-4 border-b border-white/5">
+                  <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-purple-400" />
+                    推送历史 (最近 20 条)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {data.webhookLogs.length === 0 ? (
+                    <div className="p-8 text-center text-white/40 text-sm">暂无推送记录</div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {data.webhookLogs.map(log => (
+                        <div key={log.id} className="p-3 border-b border-white/5 last:border-0 flex items-start gap-3 hover:bg-white/[0.02]">
+                          {log.status === "success" ? (
+                            <div className="w-5 h-5 rounded-full bg-[#00e8b8]/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <Check className="w-3 h-3 text-[#00e8b8]" />
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <X className="w-3 h-3 text-red-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white/80">{log.event} <span className="text-white/40 font-normal">to {log.destination}</span></p>
+                            <p className="text-[10px] text-white/40 mt-1">{new Date(log.date).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
-                <Switch 
-                  checked={data.notifications.dingtalk.enabled} 
-                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, dingtalk: {...data.notifications.dingtalk, enabled: c}}})}
-                  className="data-[state=checked]:bg-[#00e8b8]"
-                />
-              </div>
-
-              {/* WeCom */}
-              <div className="flex items-start justify-between border border-white/5 bg-white/[0.02] p-5 rounded-xl">
-                <div className="flex-1 space-y-3 mr-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-green-400" /></div>
-                    <h4 className="font-bold text-white/90">企业微信机器人</h4>
-                  </div>
-                  {data.notifications.wecom.enabled && (
-                    <Input 
-                      placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." 
-                      value={data.notifications.wecom.webhookUrl}
-                      onChange={e => setData({...data, notifications: {...data.notifications, wecom: {...data.notifications.wecom, webhookUrl: e.target.value}}})}
-                      className="bg-black/50 border-white/10 text-white text-xs font-mono h-9" 
-                    />
-                  )}
-                </div>
-                <Switch 
-                  checked={data.notifications.wecom.enabled} 
-                  onCheckedChange={c => setData({...data, notifications: {...data.notifications, wecom: {...data.notifications.wecom, enabled: c}}})}
-                  className="data-[state=checked]:bg-[#00e8b8]"
-                />
-              </div>
-
-            </CardContent>
-            <CardFooter className="p-6 pt-0 border-t border-white/5 mt-6 justify-between">
-              <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">测试发送</Button>
-              <Button onClick={handleSaveNotifications} disabled={saving} className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
-                保存更改
-              </Button>
-            </CardFooter>
-          </Card>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Billing Tab */}
