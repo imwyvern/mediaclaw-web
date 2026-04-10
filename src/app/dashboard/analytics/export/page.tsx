@@ -297,9 +297,9 @@ export default function AnalyticsExportPage() {
                       
                       <div className="flex items-center">
                         {job.status === "completed" ? (
-                          <Button size="sm" variant="ghost" className="h-8 text-[#00e8b8] hover:text-[#00e8b8] hover:bg-[#00e8b8]/10" asChild>
-                            <a href={job.url || "#"} download>下载</a>
-                          </Button>
+                          <a href={job.url || "#"} download className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-8 px-3 text-[#00e8b8] hover:text-[#00e8b8] hover:bg-[#00e8b8]/10">
+                            下载
+                          </a>
                         ) : job.status === "processing" ? (
                           <div className="flex items-center gap-1.5 text-xs text-yellow-400 font-medium px-3">
                             <Clock className="w-3 h-3 animate-spin" /> 生成中

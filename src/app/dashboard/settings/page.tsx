@@ -559,7 +559,7 @@ export default function SettingsPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Button variant="ghost" size="sm" className="h-8 text-[#00e8b8] hover:text-[#00e8b8] hover:bg-[#00e8b8]/10">下载</Button>
+                            <a href="#" download className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-8 px-3 text-[#00e8b8] hover:text-[#00e8b8] hover:bg-[#00e8b8]/10">下载</a>
                           </td>
                         </tr>
                       ))}

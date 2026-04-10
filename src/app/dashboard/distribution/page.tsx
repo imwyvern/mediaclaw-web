@@ -141,7 +141,7 @@ export default function DistributionPage() {
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 bg-white/[0.02] p-4 rounded-2xl border border-white/5">
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <Select value={employee} onValueChange={setEmployee}>
+          <Select value={employee} onValueChange={(v) => v && setEmployee(v)}>
             <SelectTrigger className="w-full sm:w-[140px] bg-white/5 border-white/10 text-white">
               <UserIcon className="w-4 h-4 mr-2 text-white/40" />
               <SelectValue placeholder="负责成员" />
@@ -153,7 +153,7 @@ export default function DistributionPage() {
             </SelectContent>
           </Select>
           
-          <Select value={platform} onValueChange={setPlatform}>
+          <Select value={platform} onValueChange={v => v && setPlatform(v)}>
             <SelectTrigger className="w-full sm:w-[140px] bg-white/5 border-white/10 text-white">
               <SelectValue placeholder="平台" />
             </SelectTrigger>

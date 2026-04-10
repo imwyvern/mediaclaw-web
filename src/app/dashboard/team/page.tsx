@@ -124,11 +124,9 @@ export default function TeamPage() {
         </div>
         
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
+          <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
               <Plus className="w-4 h-4 mr-2" /> 添加成员
-            </Button>
-          </DialogTrigger>
+            </DialogTrigger>
           <DialogContent className="bg-[#0b0f1a] border-white/10 text-white sm:rounded-2xl">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
