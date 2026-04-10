@@ -25,6 +25,8 @@ import {
   Target,
   Video,
   Users,
+  GitMerge,
+  KanbanSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -80,6 +82,8 @@ const navItems: readonly NavItem[] = [
   { name: "数据分析", href: "/dashboard/analytics", icon: BarChart, group: "数据" },
   
   { name: "活动管理", href: "/dashboard/campaigns", icon: Target, group: "管理" },
+  { name: "管线管理", href: "/dashboard/pipelines", icon: GitMerge, group: "管理" },
+  { name: "分发监控", href: "/dashboard/distribution", icon: KanbanSquare, group: "管理" },
   { name: "团队管理", href: "/dashboard/team", icon: Users, group: "管理" },
   { name: "设置", href: "/dashboard/settings", icon: Settings, group: "管理" },
 ] as const;
@@ -91,6 +95,8 @@ const routeNameMap: Record<string, string> = {
   calendar: "内容日历",
   brands: "品牌资产",
   campaigns: "活动管理",
+  pipelines: "管线管理",
+  distribution: "分发监控",
   analytics: "数据分析",
   team: "团队管理",
   settings: "设置",
