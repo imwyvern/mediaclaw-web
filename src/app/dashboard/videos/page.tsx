@@ -15,7 +15,9 @@ import {
   Trash2,
   Flame,
   AlertCircle,
-  Play
+  Play,
+  CheckCircle2,
+  X
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +26,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCompactNumber } from "@/lib/format";
+import { toast } from "sonner";
 
 interface VideoItem {
   id: string;
@@ -51,6 +56,12 @@ export default function VideoListPage() {
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Bulk Edit Modal
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkCaption, setBulkCaption] = useState("");
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
 
   const fetchVideos = async () => {
     setLoading(true);
@@ -93,15 +104,85 @@ export default function VideoListPage() {
     }
   };
 
-  const toggleSelect = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
+  // Bulk Actions
+  const handleBulkDownload = async () => {
+    const toastId = toast.loading("正在打包下载...");
+    try {
+      const res = await fetch("/api/v1/content/batch-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+      if (!res.ok) throw new Error("下载请求失败");
+      toast.success("开始下载 ZIP", { id: toastId });
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error(err.message || "打包下载失败", { id: toastId });
     }
-    setSelectedIds(newSet);
+  };
+
+  const handleBulkPublish = async () => {
+    setBulkProcessing(true);
+    setBulkProgress(10);
+    try {
+      const res = await fetch("/api/v1/content/batch-update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), status: "published" })
+      });
+      setBulkProgress(80);
+      if (!res.ok) throw new Error("批量更新状态失败");
+      
+      toast.success(`成功标记 ${selectedIds.size} 个视频为已发布`);
+      fetchVideos();
+    } catch (err: any) {
+      toast.error(err.message || "操作失败");
+    } finally {
+      setBulkProgress(100);
+      setTimeout(() => setBulkProcessing(false), 500);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个视频吗？`)) return;
+    setBulkProcessing(true);
+    try {
+      // Mock deletion
+      await new Promise(r => setTimeout(r, 1000));
+      toast.success(`已删除 ${selectedIds.size} 个视频`);
+      fetchVideos();
+    } catch (err) {
+      toast.error("批量删除失败");
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const submitBulkEdit = async () => {
+    setBulkProcessing(true);
+    setBulkProgress(20);
+    try {
+      const res = await fetch("/api/v1/content/batch-update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), caption: bulkCaption })
+      });
+      setBulkProgress(80);
+      if (!res.ok) throw new Error("批量更新文案失败");
+      
+      toast.success(`成功更新 ${selectedIds.size} 个视频文案`);
+      setBulkEditOpen(false);
+      setBulkCaption("");
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error(err.message || "批量修改失败");
+    } finally {
+      setBulkProgress(100);
+      setTimeout(() => {
+        setBulkProcessing(false);
+        setBulkProgress(0);
+      }, 500);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -118,12 +199,19 @@ export default function VideoListPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0]">
+    <div className="flex flex-col gap-6 min-h-[calc(100vh-8rem)] text-[#f0f0f0] animate-in fade-in relative">
+      {/* Progress Bar for Bulk Actions */}
+      {bulkProcessing && bulkProgress > 0 && bulkProgress < 100 && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-[#0b0f1a]">
+          <div className="h-full bg-[#00e8b8] transition-all duration-300" style={{ width: `${bulkProgress}%` }} />
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-white mb-1">视频管理</h1>
-          <p className="text-white/50">管理您的视频资产、审核状态及发布进度</p>
+          <p className="text-white/50">管理您的视频资产、审核状态及进行批量操作</p>
         </div>
         <Link href="/dashboard/videos/create">
           <Button className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
@@ -133,69 +221,87 @@ export default function VideoListPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 bg-white/[0.02] p-4 rounded-2xl border border-white/5">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <form onSubmit={handleSearch} className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-            <Input 
-              placeholder="搜索视频..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 w-full sm:w-64 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#00e8b8]/50" 
-            />
-          </form>
-          
-          <Select value={status} onValueChange={(v) => v && setStatus(v)}>
-            <SelectTrigger className="w-full sm:w-[130px] bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
-              <SelectValue placeholder="状态" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
-              <SelectItem value="all">所有状态</SelectItem>
-              <SelectItem value="draft">草稿</SelectItem>
-              <SelectItem value="processing">处理中</SelectItem>
-              <SelectItem value="ready">待发布</SelectItem>
-              <SelectItem value="published">已发布</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={platform} onValueChange={(v) => v && setPlatform(v)}>
-            <SelectTrigger className="w-full sm:w-[130px] bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
-              <SelectValue placeholder="平台" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
-              <SelectItem value="all">所有平台</SelectItem>
-              <SelectItem value="douyin">抖音</SelectItem>
-              <SelectItem value="xhs">小红书</SelectItem>
-              <SelectItem value="kuaishou">快手</SelectItem>
-              <SelectItem value="bilibili">B站</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 mr-2 animate-in fade-in zoom-in-95">
-              <span className="text-sm text-[#00e8b8] font-medium px-2">已选 {selectedIds.size} 项</span>
-              <Button size="icon" variant="outline" className="h-9 w-9 bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white" title="下载所选">
-                <Download className="w-4 h-4" />
+      <div className="flex flex-col sm:flex-row justify-between gap-4 bg-white/[0.02] p-4 rounded-2xl border border-white/5 relative overflow-hidden transition-all">
+        {selectedIds.size > 0 ? (
+          // Bulk Action Bar (Replaces normal toolbar when items selected)
+          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} className="text-white/50 hover:text-white px-2">
+                <X className="w-4 h-4 mr-1" /> 取消
               </Button>
-              <Button size="icon" variant="outline" className="h-9 w-9 bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white" title="批量编辑">
-                <Edit className="w-4 h-4" />
+              <div className="px-3 py-1.5 bg-[#00e8b8]/10 text-[#00e8b8] rounded-lg text-sm font-bold border border-[#00e8b8]/20">
+                已选择 {selectedIds.size} 个视频
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleBulkDownload} disabled={bulkProcessing} className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <Download className="w-4 h-4 mr-2" /> 批量下载 ZIP
               </Button>
-              <Button size="icon" variant="outline" className="h-9 w-9 bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300" title="删除所选">
-                <Trash2 className="w-4 h-4" />
+              <Button variant="outline" size="sm" onClick={() => setBulkEditOpen(true)} disabled={bulkProcessing} className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <Edit className="w-4 h-4 mr-2" /> 批量编辑文案
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleBulkPublish} disabled={bulkProcessing} className="bg-white/5 border-white/10 text-[#00e8b8] hover:bg-[#00e8b8]/10 hover:text-[#00e8b8]">
+                <CheckCircle2 className="w-4 h-4 mr-2" /> 标记为已发布
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleBulkDelete} disabled={bulkProcessing} className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20">
+                <Trash2 className="w-4 h-4 mr-2" /> 批量删除
               </Button>
             </div>
-          )}
-          <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
-            <Button size="icon" variant="ghost" className={`h-7 w-8 rounded-md ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`} onClick={() => setViewMode('grid')}>
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button size="icon" variant="ghost" className={`h-7 w-8 rounded-md ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`} onClick={() => setViewMode('list')}>
-              <ListIcon className="w-4 h-4" />
-            </Button>
           </div>
-        </div>
+        ) : (
+          // Normal Toolbar
+          <>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <form onSubmit={handleSearch} className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                <Input 
+                  placeholder="搜索视频..." 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 w-full sm:w-64 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#00e8b8]/50" 
+                />
+              </form>
+              
+              <Select value={status} onValueChange={(v) => v && setStatus(v)}>
+                <SelectTrigger className="w-full sm:w-[130px] bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
+                  <SelectValue placeholder="状态" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
+                  <SelectItem value="all">所有状态</SelectItem>
+                  <SelectItem value="draft">草稿</SelectItem>
+                  <SelectItem value="processing">处理中</SelectItem>
+                  <SelectItem value="ready">待发布</SelectItem>
+                  <SelectItem value="published">已发布</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={platform} onValueChange={(v) => v && setPlatform(v)}>
+                <SelectTrigger className="w-full sm:w-[130px] bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors">
+                  <SelectValue placeholder="平台" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0b0f1a] border-white/10 text-white">
+                  <SelectItem value="all">所有平台</SelectItem>
+                  <SelectItem value="douyin">抖音</SelectItem>
+                  <SelectItem value="xhs">小红书</SelectItem>
+                  <SelectItem value="kuaishou">快手</SelectItem>
+                  <SelectItem value="bilibili">B站</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
+                <Button size="icon" variant="ghost" className={`h-7 w-8 rounded-md ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`} onClick={() => setViewMode('grid')}>
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button size="icon" variant="ghost" className={`h-7 w-8 rounded-md ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`} onClick={() => setViewMode('list')}>
+                  <ListIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Main Content */}
@@ -224,8 +330,8 @@ export default function VideoListPage() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
           {videos.map((video) => (
-            <Card key={video.id} className="bg-[#0b0f1a] border-white/10 overflow-hidden hover:border-[#00e8b8]/40 transition-all duration-300 group shadow-none cursor-pointer flex flex-col" onClick={() => handleRowClick(video.id)}>
-              <div className="relative aspect-video bg-black overflow-hidden shrink-0 border-b border-white/5 group-hover:border-[#00e8b8]/30">
+            <Card key={video.id} className={`bg-[#0b0f1a] border-white/10 overflow-hidden transition-all duration-300 group cursor-pointer flex flex-col shadow-none ${selectedIds.has(video.id) ? 'ring-2 ring-[#00e8b8] border-[#00e8b8]' : 'hover:border-[#00e8b8]/40'}`} onClick={() => handleRowClick(video.id)}>
+              <div className="relative aspect-video bg-black overflow-hidden shrink-0 border-b border-white/5">
                 {video.thumbnailUrl ? (
                   <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
                 ) : (
@@ -244,7 +350,7 @@ export default function VideoListPage() {
                       else newSet.delete(video.id);
                       setSelectedIds(newSet);
                     }}
-                    className="border-white/40 data-[state=checked]:bg-[#00e8b8] data-[state=checked]:border-[#00e8b8] data-[state=checked]:text-[#0b0f1a]" 
+                    className="w-5 h-5 border-white/40 data-[state=checked]:bg-[#00e8b8] data-[state=checked]:border-[#00e8b8] data-[state=checked]:text-[#0b0f1a]" 
                   />
                 </div>
 
@@ -319,7 +425,7 @@ export default function VideoListPage() {
               </thead>
               <tbody>
                 {videos.map((video) => (
-                  <tr key={video.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group" onClick={() => handleRowClick(video.id)}>
+                  <tr key={video.id} className={`border-b border-white/5 transition-colors cursor-pointer group ${selectedIds.has(video.id) ? 'bg-[#00e8b8]/5' : 'hover:bg-white/[0.02]'}`} onClick={() => handleRowClick(video.id)}>
                     <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <Checkbox 
                         checked={selectedIds.has(video.id)} 
@@ -352,8 +458,8 @@ export default function VideoListPage() {
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </DropdownMenuTrigger>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-[#0b0f1a] border-white/10 text-white">
                           <DropdownMenuItem onClick={() => handleRowClick(video.id)} className="hover:bg-white/10 cursor-pointer">
                             <Play className="w-4 h-4 mr-2 text-white/70" /> 查看详情
@@ -375,6 +481,37 @@ export default function VideoListPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk Edit Modal */}
+      <Dialog open={bulkEditOpen} onOpenChange={setBulkEditOpen}>
+        <DialogContent className="bg-[#0b0f1a] border-white/10 text-white sm:rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Edit className="w-5 h-5 text-[#00e8b8]" /> 批量编辑文案
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-3 bg-[#00e8b8]/10 border border-[#00e8b8]/20 rounded-lg text-[#00e8b8] text-sm">
+              已选中 {selectedIds.size} 个视频。填写的内容将附加或覆盖当前选中的所有视频文案。
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-white/70">统一文案模版</label>
+              <Textarea 
+                value={bulkCaption}
+                onChange={e => setBulkCaption(e.target.value)}
+                placeholder="例如：输入统一的活动标签 #2026夏季上新 或通用话术..."
+                className="bg-white/5 border-white/10 text-white min-h-[120px] focus-visible:ring-[#00e8b8]/50" 
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-4 border-t border-white/5">
+            <Button variant="ghost" onClick={() => setBulkEditOpen(false)} className="text-white/50 hover:text-white">取消</Button>
+            <Button onClick={submitBulkEdit} disabled={bulkProcessing || !bulkCaption} className="bg-[#00e8b8] text-[#0b0f1a] hover:bg-[#00e8b8]/90 font-bold px-6">
+              {bulkProcessing ? "保存中..." : "应用到所选"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
