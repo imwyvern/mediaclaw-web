@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎬 MediaClaw Web Dashboard
+
+<div align="center">
+
+**AI-Powered Content Monetization Dashboard**
+
+Built with Next.js 15 · shadcn/ui · TypeScript
+
+[Backend API](https://github.com/imwyvern/mediaclaw-server)
+
+</div>
+
+---
+
+## Overview
+
+MediaClaw Web is the frontend dashboard for the [MediaClaw platform](https://github.com/imwyvern/mediaclaw-server) — an AI-powered system that automatically discovers viral video content, integrates brand elements, and distributes across multiple platforms.
+
+### Features
+
+- 📊 **Analytics Dashboard** — Real-time metrics on content performance, views, and revenue
+- 🎥 **Video Management** — Browse, filter, and manage AI-processed video content
+- 🏷️ **Brand Integration** — Configure brand assets, logos, and overlay settings
+- 📱 **Multi-Platform Distribution** — Manage publishing across TikTok, YouTube Shorts, Instagram Reels
+- 🤖 **AI Pipeline Monitor** — Track the status of automated video processing workflows
+- 🌙 **Dark Mode** — Full dark/light theme support via shadcn/ui
+
+## Tech Stack
+
+- **Framework:** Next.js 15 (App Router)
+- **UI:** shadcn/ui + Tailwind CSS
+- **Language:** TypeScript
+- **State:** React Server Components + Client hooks
+- **Auth:** Session-based authentication
+- **API:** REST client connecting to [mediaclaw-server](https://github.com/imwyvern/mediaclaw-server)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env.local
+# Edit .env.local with your API endpoint
+
+# Run dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/            # Next.js App Router pages
+├── components/     # Reusable UI components (shadcn/ui)
+├── lib/            # API clients, utilities
+├── hooks/          # Custom React hooks
+└── types/          # TypeScript type definitions
+```
 
-## Learn More
+## Related
 
-To learn more about Next.js, take a look at the following resources:
+- [mediaclaw-server](https://github.com/imwyvern/mediaclaw-server) — Backend API & AI pipeline
+- [viral-brand-video](https://github.com/imwyvern/viral-brand-video) — Video processing engine
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
